@@ -19,6 +19,16 @@ NUMBER_OF_PLAYER_ITEMS :: 16
 
 MAX_NUMBER_OF_SCENERY_ITEMS :: 16
 MAX_NUMBER_OF_SYNONYMS :: 8
+
+Foo :: enum {
+    _bar,
+    _baz,
+}
+
+return_int :: proc (_foo:Foo) -> int {
+    return _foo == ._bar ? 0 : 4
+}
+
 // package main
 
 // import "core:fmt"
@@ -136,7 +146,7 @@ GameSettings :: struct {
 
 SceneryItemData :: struct {
     item_name:[MAX_NUMBER_OF_SCENERY_ITEMS]string,
-    item_description:[MAX_NUMBER_OF_SCENERY_ITEMS][5]string,
+    item_description:[MAX_NUMBER_OF_SCENERY_ITEMS]string,
     synonyms:[MAX_NUMBER_OF_SCENERY_ITEMS][MAX_NUMBER_OF_SYNONYMS]string,
     number_of_items:int,
 };
@@ -162,9 +172,9 @@ GlobalEverything :: struct {
 MAX_STRING_SIZE :: 36
 
 Text_RenderState :: struct {
-    current_txt_anim: proc (int, ^GlobalSurfaces, [5]string) -> int,
+    current_txt_anim: proc (int, ^GlobalSurfaces, string) -> int,
     duration_count:int,
-    temp_data:[5][MAX_STRING_SIZE]u8, // Is this needed with future allocator stuff?
+    temp_data:string, // Is this needed with future allocator stuff?
 };
 
 Inventory_RenderState :: struct{
@@ -181,7 +191,7 @@ Menu_RenderState :: struct {
 
 DialogueNode :: struct {
     selection_option:string,// 
-    dialogue_text:[5]string,
+    dialogue_text:string,
     parent_node:^DialogueNode,
     child_nodes:[5]^DialogueNode,
     number_of_child_nodes:int,
@@ -201,7 +211,7 @@ GlobalRenderStates :: struct {
 };
 
 init_scenery_items :: proc (view_data:^ViewData){
-    add_scenery_item :: proc (scenery_items:^SceneryItemData, item_name:string, item_description:[5]string ){
+    add_scenery_item :: proc (scenery_items:^SceneryItemData, item_name:string, item_description:string ){
         assert(scenery_items.number_of_items <= 16)
         i := scenery_items.number_of_items;
         scenery_items.item_name[i] = item_name
@@ -209,25 +219,27 @@ init_scenery_items :: proc (view_data:^ViewData){
         scenery_items.number_of_items += 1;
     }
     //TODO: After string refactor, just put feed the arg in as a string lit
-    church_self_description := [5]string{"Dedicated to Saint Lazarus, this", "modest Church stands strong.", "", "", ""};
+    church_self_description := "Dedicated to Saint Lazarus, this modest Church stands strong."
     add_scenery_item(&view_data.scenery_items[.CHURCH], "CHURCH", church_self_description);
-    shrine_description := [5]string{"The shrine stands tall on the hill,", "proud of its older brother.", "", "", ""};
+    shrine_description := "The shrine stands tall on the hill, proud of its older brother."
     add_scenery_item(&view_data.scenery_items[.CHURCH], "SHRINE", shrine_description);
-    church_tree_description := [5]string{"It is a bare tree, standing alone.", "", "", "", ""};
-    add_scenery_item(&view_data.scenery_items[.CHURCH], "TREE", church_tree_description);
-    church_gate_description := [5]string{"Crudely drawn, and unfinished.", "", "", "", ""};
+    church_tree_description := "It is a bare tree, standing alone."
+    add_scenery_item(&view_data.scenery_items[.CHURCH], "TREE", "It is a bare tree, standing alone.");
+    church_gate_description := "Crudely drawn, and unfinished."
     add_scenery_item(&view_data.scenery_items[.CHURCH], "GATE", church_gate_description);
+    fmt.printf("Number of items in church context %v \n", view_data.scenery_items[.CHURCH].number_of_items)
 
-    clearing_self_description := [5]string{"A quiet clearing. A good place", "to find lazy trees.", "", "", ""};
+    clearing_self_description := "A quiet clearing. A good place to find lazy trees."
     add_scenery_item(&view_data.scenery_items[.CLEARING], "CLEARING", clearing_self_description);
-    stump_description := [5]string {"The stump is axewise stuck.", "", "", "", ""}; 
+    stump_description := "The stump is axewise stuck."
     add_scenery_item(&view_data.scenery_items[.CLEARING], "STUMP", stump_description);
-    tree_description := [5]string{"Loitering in the clearing, the ", "trees don't have much to do.", "", "", ""}; 
+    tree_description := "Loitering in the clearing, the trees don't have much to do." 
     add_scenery_item(&view_data.scenery_items[.CLEARING], "TREES", tree_description);
+    fmt.printf("Number of items in CLEARING context %v \n", view_data.scenery_items[.CLEARING].number_of_items)
 
-    shrine_self_description := [5]string{"Almost like a miniature church,", "the shrine keeps travellers hopes ", "in a travel-sized temple.", "", ""};
+    shrine_self_description := "Almost like a miniature church, the shrine keeps travellers hopes in a travel-sized temple."
     add_scenery_item(&view_data.scenery_items[.SHRINE], "SHRINE", shrine_self_description);
-    candle_description := [5]string{"A sleeping soldier of metal and oil", "waits for its next call to duty.", "", "", ""};
+    candle_description := "A sleeping soldier of metal and oil waits for its next call to duty."
     add_scenery_item(&view_data.scenery_items[.SHRINE], "CANDLE", candle_description);
 };
 
@@ -239,11 +251,17 @@ init_npc_descriptions :: proc (vd:^ViewData){
 
 };
 
+global_buffer: [4*mem.Kilobyte]byte
+global_arena: mem.Arena
+
 init_everything :: proc (using ge:^GlobalEverything) {
+    mem.init_arena(&global_arena, global_buffer[:])
+	context.allocator = mem.arena_allocator(&global_arena)
 	settings.quit = false
 	settings.window_size = 1
 
 	view_data.current_view_idx = .CHURCH
+
 
     //TODO: Turn these into dynamic arrays of enums after port⌈
     view_data.adjascent_views_num[.SHRINE] = 1;
@@ -281,6 +299,7 @@ init_everything :: proc (using ge:^GlobalEverything) {
     init_scenery_items(&view_data);
     init_npc_descriptions(&view_data);
     // Done
+    context.allocator = context.temp_allocator
     load_views :: proc (array_ref:^[VIEW_ENUMS]^sdl2.Surface) {
         for x, idx in array_ref {
             temp_directory:[32]byte;
@@ -298,12 +317,12 @@ init_everything :: proc (using ge:^GlobalEverything) {
         };
         for i in 0..=25 {
             temp_directory:[32]byte;
-            temp_dir := fmt.bprintf(temp_directory[:],  "assets/font/low_%c.bmp", 'a' + i);
+            temp_dir := fmt.bprintf(temp_directory[:], "assets/font/low_%c.bmp", 'a' + i);
             array[char_to_index('a' + i)] = sdl2.LoadBMP(strings.clone_to_cstring(temp_dir));
         };
         for i in 0..<10 {
             temp_directory:[32]byte;
-            temp_dir := fmt.bprintf(temp_directory[:],  "assets/font/%c.bmp", '0' + i);
+            temp_dir := fmt.bprintf(temp_directory[:], "assets/font/%c.bmp", '0' + i);
             fmt.printf("Doing array thing for %i \n", i)
             array[char_to_index('0' + i)] = sdl2.LoadBMP(strings.clone_to_cstring(temp_dir));
         };
@@ -379,7 +398,6 @@ init_everything :: proc (using ge:^GlobalEverything) {
                 gs.npc_standing[idx].clip_rect.x = point.x;
                 gs.npc_standing[idx].clip_rect.y = point.y;
             };
-
         };
     };
 
@@ -465,16 +483,6 @@ DialogueData :: struct {
     starter_nodes:[NPC_ENUM]^DialogueNode,
 };
 
-
-init_dialogue_nodes :: proc (nodes:[]^DialogueNode){
-    for x, i in nodes {
-        if(nodes[i].parent_node == nil){continue;};
-        child_node_index := nodes[i].parent_node.number_of_child_nodes;
-        nodes[i].parent_node.child_nodes[child_node_index] =  nodes[i];
-        nodes[i].parent_node.number_of_child_nodes += 1;
-    };
-};
-
 ITEM_ENUMS :: enum {
     AXE,
     LAZARUS_ICON,
@@ -499,7 +507,7 @@ PlayerInventory :: struct {
 };
 
 PlayerItemData :: struct {
-    item_description:[ITEM_ENUMS][5]string,
+    item_description:[ITEM_ENUMS]string,
     is_takeable_item:[ITEM_ENUMS]bool,
     is_item_taken:[ITEM_ENUMS]bool,
     current_room_location:[ITEM_ENUMS]Maybe(VIEW_ENUMS),
@@ -527,11 +535,12 @@ Item_State :: struct {
 };
 
 check_item_synonyms :: proc (str:string, pid:^PlayerItemData) -> (ITEM_ENUMS, bool) {
-    for i, idx in pid.synonyms {
-        for j in 0..<MAX_NUMBER_OF_SYNONYMS {
-            if str == pid.synonyms[idx][j] do return idx, true
-        };
-    };
+    //TODO: This is broken, fix later
+    // for i, idx in pid.synonyms {
+    //     for j in 0..<MAX_NUMBER_OF_SYNONYMS {
+    //         if str == pid.synonyms[idx][j] do return idx, true
+    //     };
+    // };
     return nil, false
 };
 
@@ -544,93 +553,13 @@ item_name_to_index :: proc (str:string, pid:^PlayerItemData) -> (item_enum:ITEM_
 };
 
 scenery_item_name_to_index :: proc (name:string, scenery_items:^SceneryItemData) -> int{
-    for honk, i in 0..<scenery_items.number_of_items {
+    for  i in 0..=scenery_items.number_of_items {
+        fmt.printf("name %v , item name %v", name, scenery_items.item_name[i])
         if name == scenery_items.item_name[i] do return i
     };
+    fmt.printf("Cannot find scenery item")
     return -1;
 };
-
-init_player_item_data :: proc ( s:^Item_State, view_data:^ViewData){
-
-    for i in 0..<MAX_ITEMS_IN_INVENTORY {
-        s.inv.inv_item[i] = {nil, -1};
-        s.inv.occupied[i] = false;
-    };
-    s.inv.origin_index = -1;
-    s.inv.tail_index = -1;
-    s.inv.number_of_items_held = 0;
-
-    for i in ITEM_ENUMS {
-        s.items.current_room_location[i] = nil;
-        s.items.index_within_inventory[i] = -1;
-        s.items.is_item_taken[i] = false;
-    };
-
-    add_item_to_PlayerItemData :: proc (room_items:^PlayerItemData, 
-        name:string, 
-        description:[5]string,
-        is_takeable:bool,
-        room_enum:VIEW_ENUMS,
-        ){
-        @static  current_number_of_items := 0;
-        assert(current_number_of_items < NUMBER_OF_PLAYER_ITEMS);
-        i, ok := item_name_to_index(name, room_items);
-        assert(ok)
-        room_items.item_description[i] = description
-        room_items.is_takeable_item[i] = is_takeable;
-        fmt.printf("for %s adding to room enum %i\n", name, room_enum);
-        room_items.current_room_location[i] = room_enum;
-        room_items.number_of_items_in_view[room_enum] += 1
-        room_items.index_within_inventory[i] -= 1;
-        current_number_of_items += 1;
-    
-    };
-
-    axe_description := [5]string{"The axe is stumpwise lodged.", "", "", "", "",};
-    add_item_to_PlayerItemData(&s.items, "AXE", axe_description, true, .CLEARING);
-    s.items.synonyms[.AXE][0] = "HATCHET"
-
-    take_axe_event :: proc (room_items:^PlayerItemData, scenery_items:^SceneryItemData){
-        axe_description := [5]string {
-            "It's a well balanced axe. Much use.","", "", "", "",
-        };
-        stump_description := [5]string {
-            "Stump left behind from an old tree.", "Memories of childhood return.","", "", "", 
-        };
-        stump_index := scenery_item_name_to_index("STUMP", scenery_items);
-        scenery_items.item_description[stump_index] = stump_description
-        room_items.item_description[.AXE] = axe_description
-    };
-    view_data.events[.CLEARING].take_events[.AXE] = take_axe_event;
-    axe_in_stump_event:PlaceEvent;
-    axe_in_stump_event.scenery_dest_index = scenery_item_name_to_index("STUMP", &view_data.scenery_items[.CLEARING]);
-    
-
-    place_axe_in_stump_event :: proc ( room_items:^PlayerItemData,  scenery_items:^SceneryItemData){
-         axe_description:= [5]string {
-            "The axe is stumpwise lodged.", "", "", "", "",
-        };
-         stump_description:= [5]string{
-            "The stump is axewise stuck.","",  "", "", "",
-        }; 
-        stump_index := scenery_item_name_to_index("STUMP", scenery_items);
-
-        room_items.item_description[.AXE] = axe_description
-        scenery_items.item_description[stump_index] = stump_description
-    };
-    
-    axe_in_stump_event.event = place_axe_in_stump_event;
-    view_data.events[.CLEARING].place_events[.AXE] = axe_in_stump_event;
-
-    lazarus_icon_description := [5]string {"An icon St Lazarus being raised", "from the dead by Christ.", "", "", "", };
-    add_item_to_PlayerItemData(&s.items, "LAZARUS_ICON", lazarus_icon_description, true, .SHRINE);
-    s.items.synonyms[.LAZARUS_ICON][0] = "ICON";
-    s.items.synonyms[.LAZARUS_ICON][1] = "LAZARUS";
-
-    icon_in_shrine_event:PlaceEvent;
-    axe_in_stump_event.scenery_dest_index = scenery_item_name_to_index("SHRINE", &view_data.scenery_items[.SHRINE]);
-    view_data.events[.SHRINE].place_events[.LAZARUS_ICON] = icon_in_shrine_event;
-}
 
  SaveData :: struct {// Initialised with new game state
     res_index:int,
@@ -645,12 +574,13 @@ SAVEGAME_IO :: enum {
 
 handle_savegame_io :: proc (mode:SAVEGAME_IO, save_data:^SaveData){
 
-    io_func := mode == .READ ? os.read : os.write
+    io_func := mode == .WRITE ? os.write : os.read
 
-    saveFileHandle, _ := os.open("save.dat", mode == .READ ? os.O_RDONLY : os.O_WRONLY);
+    saveFileHandle, err := os.open("save.dat", mode == .WRITE ? os.O_WRONLY : os.O_RDONLY);
+    fmt.printf("Err in handlefunc? -> %v", err)
     items_handled := 0;
     errno:os.Errno
-    honk: =type_info_of(ITEM_ENUMS)
+
 
     items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes (save_data.res_index));
     //Room item data
@@ -725,7 +655,6 @@ replace_all_palettes :: proc (gs:^GlobalSurfaces, room_palettes:[VIEW_ENUMS]^[4]
             replace_palette(char_sprite, room_palettes[pal_index], room_palettes[new_room_pal_index]);
         };
         for p, i in gs.quill_array{
-            fmt.printf("doing number %i \n", i)
             replace_palette(gs.quill_array[i], room_palettes[pal_index], room_palettes[new_room_pal_index]);
         };
         for npc, i in gs.npc_portraits {
@@ -782,38 +711,42 @@ handle_default_mode_event :: proc (event:^sdl2.Event, t:^TextBufferData, game_mo
 
 };
 
-AddTextAnimation :: proc (arr:^Text_RenderState, anim: proc (int, ^GlobalSurfaces, [5]string) -> int,  duration:int, temp_data:Maybe([5][LENGTH_OF_CHAR_BUFFER_ARRAY]u8)){
+addTxtAnim :: proc (arr:^Text_RenderState, anim: proc (int, ^GlobalSurfaces, string) -> int, temp_data:Maybe(string)){
     arr.current_txt_anim = anim;
-    arr.duration_count = duration;
+    arr.duration_count = 240;
     if(temp_data == nil){return;} //TODO: investigate this nil
     for i in 0..<5 {
         for j in 0..<LENGTH_OF_CHAR_BUFFER_ARRAY {
-            arr.temp_data[i][j] = temp_data.([5][LENGTH_OF_CHAR_BUFFER_ARRAY]u8)[i][j];
+            arr.temp_data = temp_data.(string)
         };
     };
 };
 
 blit_text :: proc (gs:^GlobalSurfaces, string_to_blit:string, YPosition:i32, XPosition:i32){
-    max_i := 0
-    for i, idx in string_to_blit {
-        if i == 0 {
-            max_i = idx ;break
-        }
-    }
+    // max_i := 0
+
+    //     for i, idx in string_to_blit {
+    //         if i == 0 {
+    //             max_i = idx ;break
+    //         }
+    //     }    
     
+
 
     space_rect:sdl2.Rect  
     space_rect.h = gs.font_rect.h; space_rect.w = gs.font_rect.w;
     space_rect.y = YPosition;
-    for i in 0..<max_i{
+    for i in 0..<len(string_to_blit){
         space_rect.x = i32(i) * 9 + XPosition;
         // fmt.printf("in loop, %i\n", i)
         // fmt.printf("String to blit %c , index %i , char_to_index %i , len %i", string_to_blit[i], i, char_to_index(string_to_blit[i]), max_i)
-        sdl2.BlitSurface(gs.font_surface_array[char_to_index(string_to_blit[i])], nil, gs.working_surface, &space_rect);
+        char_to_blit_idx := char_to_index(string_to_blit[i])
+        if (char_to_blit_idx == -1){continue}
+        sdl2.BlitSurface(gs.font_surface_array[char_to_blit_idx], nil, gs.working_surface, &space_rect);
     };
 };
 
-save_animation :: proc (duration:int, gs:^GlobalSurfaces, _:[5]string) -> int{
+save_animation :: proc (duration:int, gs:^GlobalSurfaces, _:string) -> int{
     blit_text(gs, "+GAME SAVED+", 0, (gs.font_rect.w * 13) );
     return duration == 0 ? -1 : duration - 1
 };
@@ -838,7 +771,7 @@ handle_menu_mode_event :: proc (event:^sdl2.Event, window:^sdl2.Window, render_s
         if(menu_state.selected_option_index == 1){
             save_data.res_index = menu_state.res_option_index;
             handle_savegame_io(.WRITE, save_data);
-            AddTextAnimation(animation_arrays, save_animation, 240, nil);
+            addTxtAnim(animation_arrays, save_animation,  nil);
             game_mode^ = ._Default;
         };
     };
@@ -931,23 +864,15 @@ blit_tile :: proc (space:^sdl2.Surface, blit_length:int, working_surface:^sdl2.S
     };
 };
 
-fixedOneLineAnimation :: proc (str:string) -> (proc (duration:int, payload:^GlobalSurfaces,  _:[5]string) -> int) {
-    temp_str := str
-    context.user_ptr = &temp_str
-    return proc (duration:int, payload:^GlobalSurfaces,  _:[5]string) -> int {
-        blit_tile(payload.font_surface_array[char_to_index(u8(' '))],LENGTH_OF_CHAR_BUFFER_ARRAY + 4,payload.working_surface, (NATIVE_HEIGHT) - payload.font_rect.h* 2, 0); 
-        blit_text(payload, (cast(^string)context.user_ptr)^, (NATIVE_HEIGHT) - payload.font_rect.h* 2, 0);        
-        return duration == 0 ? -1 : duration - 1;            
-    } 
-}
+
 LookModifier :: enum {
     _DefaultLook ,
-    _LookInsideModifier,
+    _LookInside,
 };
 
 parse_look_modifier :: proc ( str:string) -> LookModifier{
     switch(str){
-        case "IN", "WITHIN", "INSIDE": return ._LookInsideModifier;
+        case "IN", "WITHIN", "INSIDE": return ._LookInside;
     }
     return ._DefaultLook;
 }
@@ -1000,171 +925,132 @@ inventory_delete_item :: proc ( inv:^PlayerInventory, deletion_index:int) -> int
     return -1;
 };
 
+// GlobalEverything :: struct {
+//     settings:GameSettings,
+//     surfs:GlobalSurfaces,
+//     view_data:ViewData,
+//     game_mode:GameMode,
+// };
+
 handle_command :: proc (command:ValidCommand, 
+    ge:^GlobalEverything,
     global_render:^GlobalRenderStates, 
     save_data:^SaveData, 
-    vd:^ViewData, 
     item_state:^Item_State,
-    game_mode:^GameMode,
     text_buffer:^TextBufferData, 
-    global_surfaces:^GlobalSurfaces,
     dialogue_data:^DialogueData, 
     room_palettes:[VIEW_ENUMS]^[4]u32,
     ){
+        using ge;
+        one_liner ::  proc (duration:int, payload:^GlobalSurfaces,  str:string) -> int {
+            blit_tile(payload.font_surface_array[char_to_index(u8(' '))],LENGTH_OF_CHAR_BUFFER_ARRAY + 4,payload.working_surface, (NATIVE_HEIGHT) - payload.font_rect.h* 2, 0); 
+            blit_text(payload, str, (NATIVE_HEIGHT) - payload.font_rect.h* 2, 0);        
+            return duration == 0 ? -1 : duration - 1;            
+        } 
         switch(command){
 
-            case .Save: {
+            case .Save: 
                 save_data.res_index = global_render.menu.res_option_index;
-                save_data.view_data.current_view_idx = vd.current_view_idx;
+                save_data.view_data.current_view_idx = view_data.current_view_idx;
                 save_data.item_data = item_state.items;
                 save_data.inventory_data = item_state.inv;
-                save_data.view_data.npc_in_room = vd.npc_in_room
-                save_data.view_data.scenery_items = vd.scenery_items
+                save_data.view_data.npc_in_room = view_data.npc_in_room
+                save_data.view_data.scenery_items = view_data.scenery_items
                 handle_savegame_io(.WRITE, save_data);
-                AddTextAnimation(&global_render.txt, save_animation, 240, nil);
-            };
-            case .Menu: { 
-                game_mode^ = ._Menu;
-            }; 
-            case .Quit: {
-                e:sdl2.Event 
-                e.type = .QUIT;
-                sdl2.PushEvent(&e);
-            }; 
-            case .Go: {
-                if(text_buffer.tokenBuffer[1] == ""){
-                    AddTextAnimation(&global_render.txt, fixedOneLineAnimation("Where would you like to go?"), 240, nil);
-                    break;
-                };
+                addTxtAnim(&global_render.txt, save_animation,  nil);
+            case .Menu: game_mode = ._Menu; 
+            case .Quit: sdl2.PushEvent(&sdl2.Event{type = .QUIT});
+            case .Go: 
+                if (len(text_buffer.tokenBuffer) == 1) {addTxtAnim(&global_render.txt, one_liner, "Where would you like to go?");break;};
                 new_index, ok := reflect.enum_from_name(VIEW_ENUMS, text_buffer.tokenBuffer[1]);
-                if (!ok){
-                    fmt.printf("index for %s is %i \n", text_buffer.tokenBuffer[1], new_index);
-                    AddTextAnimation(
-                        &global_render.txt, 
-                        fixedOneLineAnimation(fmt.aprint( "'%s' isn't near here.", text_buffer.tokenBuffer[1])), 
-                        240, 
-                        nil);
-                    break;
+                if (new_index == view_data.current_view_idx){addTxtAnim(&global_render.txt, one_liner, "You're already here!");break;};
+
+                ok = view_data.adjascent_views[view_data.current_view_idx][new_index];
+                switch ok {
+                    case false:
+                        addTxtAnim(&global_render.txt, one_liner,  fmt.aprintf( "'%s' isn't near here.", text_buffer.tokenBuffer[1]));
+                    case true:
+                        if(view_data.view_type[new_index] != .Room){addTxtAnim(&global_render.txt, one_liner, "You cannot fit in there!"); break;}
+                        global_render.txt.duration_count = 0; view_data.current_view_idx = new_index;
+                        replace_all_palettes(&surfs, room_palettes, new_index);
                 }
-                dest_is_adjascent := vd.adjascent_views[vd.current_view_idx][new_index];
-                if(!dest_is_adjascent){
-                    AddTextAnimation(
-                        &global_render.txt, 
-                        fixedOneLineAnimation(fmt.aprint( "'%s' isn't near here.", text_buffer.tokenBuffer[1])), 
-                        240, 
-                        nil);
-                    break;
-                };
-                if(vd.view_type[new_index] != .Room){
-                    AddTextAnimation(&global_render.txt, fixedOneLineAnimation("You cannot fit in there!"), 240, nil);
-                    break;
-                };
-                vd.current_view_idx = new_index
-                replace_all_palettes(global_surfaces, room_palettes, new_index);
-                global_render.txt.duration_count = 0;
-            };
             case .Look:{
-                if(len(text_buffer.tokenBuffer) == 1){
-                    AddTextAnimation(&global_render.txt, fixedOneLineAnimation("What would you like to look at?"), 240, nil);
-                    break;
-                };
-                look_modifier := parse_look_modifier(text_buffer.tokenBuffer[1]);
-                switch(look_modifier){
-                    case ._LookInsideModifier: {
-                        if(text_buffer.tokenBuffer[2] == ""){
-                            AddTextAnimation(&global_render.txt, fixedOneLineAnimation("What would you like to look in?"), 240, nil);
-                            break;
+                if(len(text_buffer.tokenBuffer) == 1){addTxtAnim(&global_render.txt, one_liner, "What would you like to look at?");break;};
+                switch(parse_look_modifier(text_buffer.tokenBuffer[1])){
+                    case ._LookInside: {
+                        if(len(text_buffer.tokenBuffer) == 2){addTxtAnim(&global_render.txt, one_liner, "What would you like to look in?"); break;};
+                        if text_buffer.tokenBuffer[2] == "INVENTORY"{game_mode = ._Inventory;break;};
+                        new_index, ok := reflect.enum_from_name(VIEW_ENUMS, text_buffer.tokenBuffer[1]);;
+                        if(ok && view_data.view_type[new_index] == .LookInside){
+                            global_render.txt.duration_count = 0; view_data.current_view_idx = new_index;
                         };
-                        if text_buffer.tokenBuffer[2] == "INVENTORY"{
-                            game_mode^ = ._Inventory;
-                            break;
-                        };
-                        view_index, ok := reflect.enum_from_name(VIEW_ENUMS, text_buffer.tokenBuffer[1]);;
-                        if(ok){
-                            if(vd.view_type[view_index] == .LookInside){
-                                vd.current_view_idx = view_index;
-                                break;
-                            }
-                            AddTextAnimation(&global_render.txt, fixedOneLineAnimation("Cannot look inside there."), 240, nil);
-                            break;
-                        };
+                        addTxtAnim(&global_render.txt, one_liner, "Cannot look inside there.");
                     };
                     case ._DefaultLook:
-                        //TODO: stuff here
-                        if(text_buffer.tokenBuffer[1] == "INVENTORY"){
-                            game_mode^ = ._Inventory;
-                            break;
-                        };
+                        if(text_buffer.tokenBuffer[1] == "INVENTORY"){game_mode = ._Inventory;break;};
                         item_index, ok := item_name_to_index(text_buffer.tokenBuffer[1], &item_state.items);
                         if(ok){
                             fmt.printf("pinging on item %s %i",text_buffer.tokenBuffer[1], item_index );
-                            // new_string:[5][LENGTH_OF_CHAR_BUFFER_ARRAY]u8;
-                            // for str, i in &new_string {
-                            //     str = item_state.items.item_description[item_index][i]
-                            // };
-                            AddTextAnimation(&global_render.txt, fixedOneLineAnimation("TEST - Success Item Look"), 240, nil);
+                            addTxtAnim(&global_render.txt, one_liner, item_state.items.item_description[item_index]);
                             break;
                         };
-
-                        _item_index := scenery_item_name_to_index(text_buffer.tokenBuffer[1], &vd.scenery_items[vd.current_view_idx]);
+                        _item_index := scenery_item_name_to_index(text_buffer.tokenBuffer[1], &view_data.scenery_items[view_data.current_view_idx]);
+                        fmt.printf("Current view: %v", reflect.enum_string(view_data.current_view_idx))
                         if(_item_index != -1){
-                            new_string:[5][LENGTH_OF_CHAR_BUFFER_ARRAY]u8;
+                            new_string:[5]string
+                            fmt.printf("pinging on item %s %i",text_buffer.tokenBuffer[1], _item_index );
                             // for str in &new_string {
                             //    str = vd.scenery_items[vd.current_view_idx].item_description[_item_index][i]
                             // };
-                            AddTextAnimation(&global_render.txt, fixedOneLineAnimation("TEST - Scenery Item Look"), 240, new_string);
+                            addTxtAnim(&global_render.txt, one_liner, "TEST - Scenery Item Look");
                             break;
                         };
                         npc_index, _ok := reflect.enum_from_name(NPC_ENUM, text_buffer.tokenBuffer[1])
-                        if(_ok && vd.npc_in_room[vd.current_view_idx] == npc_index){
-
-                            new_string:[5][LENGTH_OF_CHAR_BUFFER_ARRAY]u8;
+                        
+                        if(_ok && view_data.npc_in_room[view_data.current_view_idx] == npc_index){
+                            new_string:[5]string
                             // for str in &new_string {
                             //     str = vd.npc_description[npc_index][i]
                             // };
-                            AddTextAnimation(&global_render.txt, fixedOneLineAnimation("TEST - Success NPC Look"), 240, new_string);
-                            break;
-                        };
-                        AddTextAnimation(
-                            &global_render.txt, 
-                            fixedOneLineAnimation(fmt.aprint( "Cannot find the '%s'.", text_buffer.tokenBuffer[1])), 
-                            240, 
-                            nil);
-                        break;
+                            addTxtAnim(&global_render.txt, one_liner, "TEST - Success NPC Look");
+                        } else {
+                            addTxtAnim(&global_render.txt, one_liner, fmt.aprintf("Cannot find the '%s'.", text_buffer.tokenBuffer[1]));
                         }
+    
+                    }
 
             };
             case .Take:{
-                if(text_buffer.tokenBuffer[1] == ""){
-                    AddTextAnimation(&global_render.txt, fixedOneLineAnimation("What would you like to take?"), 240, nil);
+                if(len(text_buffer.tokenBuffer) == 1 ){
+                    addTxtAnim(&global_render.txt, one_liner, "What would you like to take?");
                     break;
                 };
                 item_index, ok := item_name_to_index(text_buffer.tokenBuffer[1], &item_state.items);
-                if(!ok || item_state.items.current_room_location[item_index] != vd.current_view_idx){
-                    AddTextAnimation(
+                if(!ok || item_state.items.current_room_location[item_index] != view_data.current_view_idx){
+                    addTxtAnim(
                         &global_render.txt, 
-                        fixedOneLineAnimation(fmt.aprint( "Cannot find the '%s'.", text_buffer.tokenBuffer[1])), 
-                        240, 
-                        nil);
+                        one_liner, 
+                         
+                        fmt.aprintf( "Cannot find the '%s'.", text_buffer.tokenBuffer[1]));
                     break;
                 };
                 item_state.items.is_item_taken[item_index] = true;
                 item_state.items.current_room_location[item_index] = nil;
-                item_state.items.number_of_items_in_view[vd.current_view_idx] -=1;
+                item_state.items.number_of_items_in_view[view_data.current_view_idx] -=1;
                 item_state.items.index_within_inventory[item_index] = inventory_add_item(&item_state.inv, item_index); // likely to be taken out
 
-                if(vd.events[vd.current_view_idx].take_events[item_index] != nil){
-                    vd.events[vd.current_view_idx].take_events[item_index](&item_state.items, &vd.scenery_items[vd.current_view_idx]);
+                if(view_data.events[view_data.current_view_idx].take_events[item_index] != nil){
+                    view_data.events[view_data.current_view_idx].take_events[item_index](&item_state.items, &view_data.scenery_items[view_data.current_view_idx]);
                 };
-                AddTextAnimation(
+                addTxtAnim(
                     &global_render.txt, 
-                    fixedOneLineAnimation(fmt.aprint( "You take the '%s'.", text_buffer.tokenBuffer[1])), 
-                    240, 
-                    nil);
+                    one_liner, 
+                     
+                    fmt.aprintf( "You take the '%s'.", text_buffer.tokenBuffer[1]));
             };
               case .Place:{
-                if text_buffer.tokenBuffer[1] == "" {
-                    AddTextAnimation(&global_render.txt, fixedOneLineAnimation("What would you like to place?"), 240, nil);
+                if len(text_buffer.tokenBuffer) == 1 {
+                    addTxtAnim(&global_render.txt, one_liner, "What would you like to place?");
                     break;
                 };
 
@@ -1172,79 +1058,79 @@ handle_command :: proc (command:ValidCommand,
                 index_within_inventory := item_state.items.index_within_inventory[item_enum];
 
                 if(!ok || index_within_inventory == -1){
-                    AddTextAnimation(
+                    addTxtAnim(
                         &global_render.txt, 
-                        fixedOneLineAnimation(fmt.aprint( "You have no '%s'.", text_buffer.tokenBuffer[1])), 
-                        240, 
-                        nil);
+                        one_liner, 
+                         
+                        fmt.aprintf( "You have no '%s'.", text_buffer.tokenBuffer[1]));
                     break;
                 };
 
-                if text_buffer.tokenBuffer[2] == ""{
-                    AddTextAnimation(&global_render.txt, fixedOneLineAnimation("Where would you like to place it?"), 240, nil);
+                if len(text_buffer.tokenBuffer) == 2 {
+                    addTxtAnim(&global_render.txt, one_liner, "Where would you like to place it?");
                     break;
                 };
-                destination_index := scenery_item_name_to_index(text_buffer.tokenBuffer[2], &vd.scenery_items[vd.current_view_idx]);
+                destination_index := scenery_item_name_to_index(text_buffer.tokenBuffer[2], &view_data.scenery_items[view_data.current_view_idx]);
                 if(destination_index == -1){
-                    AddTextAnimation(
+                    addTxtAnim(
                         &global_render.txt, 
-                        fixedOneLineAnimation(fmt.aprint( "Cannot find the '%s'.", text_buffer.tokenBuffer[1])), 
-                        240, 
-                        nil);
+                        one_liner, 
+                         
+                        fmt.aprintf( "Cannot find the '%s'.", text_buffer.tokenBuffer[1]));
                     break;
                 };
-                if(vd.events[vd.current_view_idx].place_events[item_enum].scenery_dest_index != destination_index){
-                    AddTextAnimation(&global_render.txt, fixedOneLineAnimation("You can't place that there."), 240, nil);
+                if(view_data.events[view_data.current_view_idx].place_events[item_enum].scenery_dest_index != destination_index){
+                    addTxtAnim(&global_render.txt, one_liner, "You can't place that there.");
                     break;
                 };
-                if(vd.events[vd.current_view_idx].place_events[item_enum].event != nil){
-                    vd.events[vd.current_view_idx].place_events[item_enum].event(&item_state.items, &vd.scenery_items[vd.current_view_idx]);
+                if(view_data.events[view_data.current_view_idx].place_events[item_enum].event != nil){
+                    view_data.events[view_data.current_view_idx].place_events[item_enum].event(&item_state.items, &view_data.scenery_items[view_data.current_view_idx]);
                 }
                 // printf("Item %i desc is now %s \n", item_enum, item_state.items.item_description[_i_AXE][0]);
                 fmt.printf("what %i \n", item_state.items.is_item_taken[item_enum]);
                 item_state.items.is_item_taken[item_enum] = false;
-                item_state.items.current_room_location[item_enum] = vd.current_view_idx;
-                item_state.items.number_of_items_in_view[vd.current_view_idx] += 1;
+                item_state.items.current_room_location[item_enum] = view_data.current_view_idx;
+                item_state.items.number_of_items_in_view[view_data.current_view_idx] += 1;
                 item_state.items.index_within_inventory[item_enum] = -1;
                 inventory_delete_item(&item_state.inv, index_within_inventory);
-                AddTextAnimation(
+                addTxtAnim(
                     &global_render.txt, 
-                    fixedOneLineAnimation(fmt.aprint( "The '%s' is placed.", text_buffer.tokenBuffer[1])), 
-                    240, 
-                    nil);
+                    one_liner, 
+                     
+                    fmt.aprintf( "The '%s' is placed.", text_buffer.tokenBuffer[1]));
             };
             case .Talk:{
-                if text_buffer.tokenBuffer[1] == "" {
-                    AddTextAnimation(&global_render.txt, fixedOneLineAnimation("Who would you like to talk to?"), 240, nil);
+                if len(text_buffer.tokenBuffer) == 1 {
+                    addTxtAnim(&global_render.txt, one_liner, "Who would you like to talk to?");
                     break;
                 };
                 npc_index, ok := reflect.enum_from_name(NPC_ENUM, text_buffer.tokenBuffer[1])
-                if(!ok || vd.npc_in_room[vd.current_view_idx] != npc_index){
-                    AddTextAnimation(
+                if(!ok || view_data.npc_in_room[view_data.current_view_idx] != npc_index){
+                    addTxtAnim(
                         &global_render.txt, 
-                        fixedOneLineAnimation(fmt.aprint("'%s' is not here.", text_buffer.tokenBuffer[1])), 
-                        240, 
-                        nil);
+                        one_liner, 
+                         
+                        fmt.aprintf("'%s' is not here.", text_buffer.tokenBuffer[1]));
                     break;
                 };
                 global_render.npc.current_npc = npc_index;
                 global_render.npc.current_node = dialogue_data.starter_nodes[npc_index];
-                game_mode^ = ._Dialogue;
+                game_mode = ._Dialogue;
                 };break;
             case .Inventory:{
-                game_mode^ = ._Inventory;
+                game_mode = ._Inventory;
             };
             case .ListExits:{
                 new_string:[5]string
                 room_names:[NUMBER_OF_VIEWS]string;
                 for i in VIEW_ENUMS {
-                    if(vd.view_type[i] == .LookInside){continue;};
-                    if(vd.adjascent_views[vd.current_view_idx][i]){room_names[i] = reflect.enum_string(i);};
+                    if(view_data.view_type[i] == .LookInside){continue;};
+                    if(view_data.adjascent_views[view_data.current_view_idx][i]){room_names[i] = reflect.enum_string(i);};
                 }
                 i := 0
-                for(i < vd.adjascent_views_num[vd.current_view_idx]){
+                for(i < view_data.adjascent_views_num[view_data.current_view_idx]){
                     for j in VIEW_ENUMS {
-                         if (vd.adjascent_views[vd.current_view_idx][j] == true){
+                         if (view_data.adjascent_views[view_data.current_view_idx][j] == true){
                             new_string[i] = room_names[j]
                             i+=1;
                     }
@@ -1253,7 +1139,7 @@ handle_command :: proc (command:ValidCommand,
                     fmt.printf("Place name that is exit %i: %s \n", i, new_string[i]);
                 }
 
-                AddTextAnimation(&global_render.txt, fixedOneLineAnimation("TEST - List Exits"), 240, nil);
+                addTxtAnim(&global_render.txt, one_liner, "TEST - List Exits");
                 break;
             };
             
@@ -1261,9 +1147,89 @@ handle_command :: proc (command:ValidCommand,
         case .Invalid, .Exit:{};
     }
 };
+init_player_item_data :: proc ( s:^Item_State, view_data:^ViewData){
+
+    for i in 0..<MAX_ITEMS_IN_INVENTORY {
+        s.inv.inv_item[i] = {nil, -1};
+        s.inv.occupied[i] = false;
+    };
+    s.inv.origin_index = -1;
+    s.inv.tail_index = -1;
+    s.inv.number_of_items_held = 0;
+
+    for i in ITEM_ENUMS {
+        s.items.current_room_location[i] = nil;
+        s.items.index_within_inventory[i] = -1;
+        s.items.is_item_taken[i] = false;
+    };
+
+    add_item_to_PlayerItemData :: proc (room_items:^PlayerItemData, 
+        name:string, 
+        description:string,
+        is_takeable:bool,
+        room_enum:VIEW_ENUMS,
+        ){
+        @static  current_number_of_items := 0;
+        assert(current_number_of_items < NUMBER_OF_PLAYER_ITEMS);
+        i, ok := item_name_to_index(name, room_items);
+        assert(ok)
+        room_items.item_description[i] = description
+        room_items.is_takeable_item[i] = is_takeable;
+        fmt.printf("for %s adding to room enum %i\n", name, room_enum);
+        room_items.current_room_location[i] = room_enum;
+        room_items.number_of_items_in_view[room_enum] += 1
+        room_items.index_within_inventory[i] -= 1;
+        current_number_of_items += 1;
+    
+    };
+
+    axe_description := "The axe is stumpwise lodged."
+    add_item_to_PlayerItemData(&s.items, "AXE", axe_description, true, .CLEARING);
+    s.items.synonyms[.AXE][0] = "HATCHET"
+
+    take_axe_event :: proc (room_items:^PlayerItemData, scenery_items:^SceneryItemData){
+        axe_description := 
+            "It's a well balanced axe. Much use."
+        stump_description :=
+            "Stump left behind from an old tree. Memories of childhood return."
+        stump_index := scenery_item_name_to_index("STUMP", scenery_items);
+        scenery_items.item_description[stump_index] = stump_description
+        room_items.item_description[.AXE] = axe_description
+    };
+    view_data.events[.CLEARING].take_events[.AXE] = take_axe_event;
+    axe_in_stump_event:PlaceEvent;
+    axe_in_stump_event.scenery_dest_index = scenery_item_name_to_index("STUMP", &view_data.scenery_items[.CLEARING]);
+    
+
+    place_axe_in_stump_event :: proc ( room_items:^PlayerItemData,  scenery_items:^SceneryItemData){
+         axe_description :=
+            "The axe is stumpwise lodged."
+         stump_description:= 
+            "The stump is axewise stuck."
+        stump_index := scenery_item_name_to_index("STUMP", scenery_items);
+
+        room_items.item_description[.AXE] = axe_description
+        scenery_items.item_description[stump_index] = stump_description
+    };
+    
+    axe_in_stump_event.event = place_axe_in_stump_event;
+    view_data.events[.CLEARING].place_events[.AXE] = axe_in_stump_event;
+
+    lazarus_icon_description :="An icon St Lazarus being raised from the dead by Christ."
+    add_item_to_PlayerItemData(&s.items, "LAZARUS_ICON", lazarus_icon_description, true, .SHRINE);
+    s.items.synonyms[.LAZARUS_ICON][0] = "ICON";
+    s.items.synonyms[.LAZARUS_ICON][1] = "LAZARUS";
+
+    icon_in_shrine_event:PlaceEvent;
+    icon_in_shrine_event.scenery_dest_index = scenery_item_name_to_index("SHRINE", &view_data.scenery_items[.SHRINE]);
+    view_data.events[.SHRINE].place_events[.LAZARUS_ICON] = icon_in_shrine_event;
+}
 
 
+import "core:runtime"
 main :: proc (){
+    
+
 	using sdl2;
     if( Init( INIT_VIDEO ) < 0 ){
         fmt.printf( "SDL could not initialize! SDL_Error: %s\n", sdl2.GetError() );
@@ -1273,6 +1239,7 @@ main :: proc (){
     frameDuration :: 1000 / FPS;
     ge:GlobalEverything;
 	init_everything(&ge)
+    context.allocator = runtime.default_allocator()
     text_buffer:TextBufferData;
 
     church_palette: = [4]u32{0xCBF1F5, 0x445975, 0x0E0F21, 0x050314};
@@ -1287,25 +1254,34 @@ main :: proc (){
     };
 
     dialogue_data:DialogueData;
+    //NOTE: Fix text
     alexei_start:DialogueNode = {
-        dialogue_text = {"\"Your time is nigh.", "...Repent!\"", "", "", "",},
+        dialogue_text = "Your time is nigh. ...Repent!",
     };
     alexei_second:DialogueNode = {
-        dialogue_text = {"\"...Else into the hole with you!\"", "", "", "", ""}, 
+        dialogue_text = "...Else into the hole with you!", 
         parent_node = &alexei_start,
     };
     alexei_third_1:DialogueNode = {
         selection_option = "Hole?", 
-        dialogue_text = {"Yes, hole.", "The deep hole has many sharp bits.", "It will be hard to fish you out.", "", ""}, 
+        dialogue_text = "Yes, hole. The deep hole has many sharp bits. It will be hard to fish you out.",
         parent_node = &alexei_second,
     };
     alexei_third_2:DialogueNode = {
         selection_option = "I'm not repenting.", 
-        dialogue_text = {"Alexei shakes his head.", "\"You're already in deep.\"", "", "", ""}, 
+        dialogue_text = "Alexei shakes his head. You're already in deep.",
         parent_node = &alexei_second,
     };
     alexei_dialogue:[4]^DialogueNode = {&alexei_start, &alexei_second, &alexei_third_1, &alexei_third_2};
 
+    init_dialogue_nodes :: proc (nodes:[]^DialogueNode){
+        for x, i in nodes {
+            if(nodes[i].parent_node == nil){continue;};
+            child_node_index := nodes[i].parent_node.number_of_child_nodes;
+            nodes[i].parent_node.child_nodes[child_node_index] =  nodes[i];
+            nodes[i].parent_node.number_of_child_nodes += 1;
+        };
+    };
     init_dialogue_nodes(alexei_dialogue[:])
 
     item_state:Item_State;
@@ -1315,14 +1291,20 @@ main :: proc (){
     saveFileHandle, err := os.open("save.dat", os.O_RDONLY)
 
     fresh_game := err == os.ERROR_FILE_NOT_FOUND;
+    fmt.printf("File error -> %v ", err)
+    fmt.printf("New game? %v", fresh_game)
+    os.close(saveFileHandle)
     save_data:SaveData
     if (fresh_game){
+        createFileHandle, err := os.open("save.dat", os.O_CREATE)
+        //Init default save data
         save_data.res_index = 0;
         save_data.item_data = item_state.items;
         save_data.inventory_data = item_state.inv;
         save_data.view_data.current_view_idx =  .CHURCH;
         save_data.view_data.npc_in_room = ge.view_data.npc_in_room
         save_data.view_data.scenery_items = ge.view_data.scenery_items // TODO: Get a database of string information, have runtime & savedata just reverence the data base
+        os.close(createFileHandle)
     }
     handle_savegame_io(fresh_game ? .WRITE : .READ, &save_data);
 
@@ -1331,6 +1313,7 @@ main :: proc (){
     global_render.menu.prev_res_option_index = 0;
 
     if (!fresh_game){
+        //Read save data
         global_render.menu.res_option_index = save_data.res_index;
         global_render.menu.prev_res_option_index = save_data.res_index;
         item_state.items = save_data.item_data;
@@ -1376,7 +1359,7 @@ main :: proc (){
         
         if(len(text_buffer.tokenBuffer) > 0){
             command: = parse_token(text_buffer.tokenBuffer[0]);
-            handle_command(command, &global_render, &save_data, &view_data, &item_state, &game_mode, &text_buffer, &ge.surfs, &dialogue_data, room_palettes);
+            handle_command(command, &ge, &global_render, &save_data, &item_state, &text_buffer, &dialogue_data, room_palettes);
         }
 
         sdl2.BlitSurface(surfs.view_background_surfaces[view_data.current_view_idx], nil, surfs.working_surface, nil);
@@ -1414,11 +1397,7 @@ main :: proc (){
                     if(arr.current_txt_anim == nil){
                         return;
                     }
-                    new_strings :[5]string
-                    for _u8s,i in &arr.temp_data {
-                        new_strings[i] = string(_u8s[:])
-                    }
-                    new_count := arr.current_txt_anim(arr.duration_count, tap, new_strings);
+                    new_count := arr.current_txt_anim(arr.duration_count, tap, arr.temp_data);
                     if(new_count == -1){
                         mem.zero_item(&arr.current_txt_anim)
                         mem.zero_item(&arr.current_txt_anim);
