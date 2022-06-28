@@ -6,7 +6,6 @@ import "core:slice";
 import "core:os";
 import "vendor:sdl2";
 
-
 NATIVE_WIDTH :: 320
 NATIVE_HEIGHT :: 200
 
@@ -180,12 +179,10 @@ render_menu :: proc (using ge:^GlobalEverything, ){
 };
 
 inventory_get_nth_item :: proc (using inv:^PlayerInventory, position_in_list:int) -> (PLAYER_ITEM, bool){
-    if inv.origin_index <= -1 do return nil, false
+    if inv.origin_index == -1 do return nil, false
     current_item := inv.inv_item[inv.origin_index];
     for  i in  0..<inv.number_of_items_held {
-        if(i == position_in_list){
-            return current_item.item_enum, true
-        };
+        if i == position_in_list do return current_item.item_enum, true
         if current_item.next_item_index == -1 do return nil, false
         current_item = inv.inv_item[current_item.next_item_index];
     };
@@ -193,7 +190,6 @@ inventory_get_nth_item :: proc (using inv:^PlayerInventory, position_in_list:int
 };
 
 render_inventory :: proc (using ge:^GlobalEverything, ){
-    // gs:^GlobalSurfaces, player_items:^PlayerItemData, inv:^PlayerInventory, inv:^Inventory_RenderState
     for Y in 0..<8 {
         blit_tile(surfs.font_surface_array[char_to_index(u8(' '))],36,surfs.working_surface, surfs.font_rect.h* i32(Y), 0);
     };
@@ -305,6 +301,7 @@ init_npc_descriptions :: proc (vd:^ViewData){
 };
 
 init_surfaces :: proc (using surfs:^GlobalSurfaces) {
+    context.allocator = context.temp_allocator
     for x, idx in view_background_surfaces {
         temp_dir := fmt.aprintf("assets/%s.bmp", reflect.enum_string(idx));
         view_background_surfaces[idx] = sdl2.LoadBMP(strings.clone_to_cstring(temp_dir));
@@ -385,7 +382,7 @@ global_buffer: [4*mem.Kilobyte]byte
 global_arena: mem.Arena
 
 init_everything :: proc (using ge:^GlobalEverything) {
-    context.allocator = context.temp_allocator
+    
     palettes = {
         .Church = [4]u32{0xCBF1F5, 0x445975, 0x0E0F21, 0x050314},
         .Clearing = [4]u32{0xEBE08D, 0x8A7236, 0x3D2D17, 0x1A1006},
@@ -440,35 +437,7 @@ init_everything :: proc (using ge:^GlobalEverything) {
     // Done
 	game_mode = ._Default
 
-    alexei_start:DialogueNode = {
-        dialogue_text = "Your time is nigh. ...Repent!",
-    };
-    alexei_second:DialogueNode = {
-        dialogue_text = "...Else into the hole with you!", 
-        parent_node = &alexei_start,
-    };
-    alexei_third_1:DialogueNode = {
-        selection_option = "Hole?", 
-        dialogue_text = "Yes, hole. The deep hole has many sharp bits. It will be hard to fish you out.",
-        parent_node = &alexei_second,
-    };
-    alexei_third_2:DialogueNode = {
-        selection_option = "I'm not repenting.", 
-        dialogue_text = "Alexei shakes his head. You're already in deep.",
-        parent_node = &alexei_second,
-    };
-    alexei_dialogue:[4]^DialogueNode = {&alexei_start, &alexei_second, &alexei_third_1, &alexei_third_2};
 
-    init_dialogue_nodes :: proc (nodes:[]^DialogueNode){
-        for x, i in nodes {
-            if(nodes[i].parent_node == nil){continue;};
-            child_node_index := nodes[i].parent_node.number_of_child_nodes;
-            nodes[i].parent_node.child_nodes[child_node_index] =  nodes[i];
-            nodes[i].parent_node.number_of_child_nodes += 1;
-        };
-    };
-    init_dialogue_nodes(alexei_dialogue[:])
-    ge.dialogue_data.starter_nodes[.ALEXEI] = alexei_dialogue[0]
 
 
     init_player_item_data(&item_state, &ge.view_data);
@@ -549,7 +518,7 @@ PLAYER_ITEM :: enum {
 
 InventoryItem_ListElem :: struct {
     item_enum:PLAYER_ITEM,
-    next_item_index:int, // -1 = tail
+    next_item_index:i8, // -1 = tail
 };
 
 MAX_ITEMS_IN_INVENTORY :: 12
@@ -557,8 +526,8 @@ MAX_ITEMS_IN_INVENTORY :: 12
 PlayerInventory :: struct {
     inv_item:[MAX_ITEMS_IN_INVENTORY]InventoryItem_ListElem,
     occupied:[MAX_ITEMS_IN_INVENTORY]bool,
-    tail_index:int,
-    origin_index:int,
+    tail_index:i8,
+    origin_index:i8,
     number_of_items_held:int,
 };
 SCENERY_ITEM :: distinct string
@@ -572,7 +541,7 @@ PlayerItemData :: struct {
     is_item_taken:bit_set[PLAYER_ITEM],
     current_room_location:[PLAYER_ITEM]Maybe(VIEW_ENUMS),
     number_of_items_in_view:[VIEW_ENUMS]int,
-    index_within_inventory:[PLAYER_ITEM]int,
+    index_within_inventory:[PLAYER_ITEM]i8,
 };
 
 PlaceEvent :: struct {
@@ -677,14 +646,6 @@ _SaveData :: struct {
 
 }
 
-
-//  SaveData :: struct {// Initialised with new game state
-//     res_index:int,
-//     item_data: PlayerItemData,
-//     inventory_data: PlayerInventory,
-//     view_data:ViewData,
-// };
-
 SAVEGAME_IO :: enum {
     READ,
     WRITE,
@@ -699,10 +660,7 @@ handle_savegame_io :: proc (mode:SAVEGAME_IO, save_data:^_SaveData){
     items_handled := 0;
     errno:os.Errno
 
-    // items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes (save_data));
-
-
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes (save_data.res_index));
+    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.res_index));
     
     items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.index_within_inventory));
     items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.is_item_taken));
@@ -923,7 +881,7 @@ parse_look_modifier :: proc ( str:string) -> LookModifier{
     return ._DefaultLook;
 }
 
-inventory_add_item :: proc (inv:^PlayerInventory, new_item:PLAYER_ITEM) -> int {
+inventory_add_item :: proc (inv:^PlayerInventory, new_item:PLAYER_ITEM) -> i8 {
     new_inv_item:InventoryItem_ListElem;
     new_inv_item.item_enum = new_item;
     new_inv_item.next_item_index = -1;
@@ -938,18 +896,18 @@ inventory_add_item :: proc (inv:^PlayerInventory, new_item:PLAYER_ITEM) -> int {
     };
     for i in 0..< MAX_ITEMS_IN_INVENTORY {
         if inv.occupied[i] == true do continue;
-        if inv.tail_index != -1 do inv.inv_item[inv.tail_index].next_item_index = i;
-        inv.tail_index = i;
+        if inv.tail_index != -1 do inv.inv_item[inv.tail_index].next_item_index = cast(i8)i;
+        inv.tail_index = cast(i8)i;
         inv.occupied[i] = true;
         inv.inv_item[i] = new_inv_item;
         inv.number_of_items_held +=1;
-        return i;
+        return cast(i8)i;
     };
     //All slots occupado
     return -1;
 };
 
-inventory_delete_item :: proc ( inv:^PlayerInventory, deletion_index:int) -> int {
+inventory_delete_item :: proc ( inv:^PlayerInventory, deletion_index:i8) -> int {
     if(deletion_index == inv.origin_index){
         //TODO: ruh roh, whats going on here
         new_origin_index := inv.inv_item[inv.origin_index].next_item_index;
@@ -961,7 +919,7 @@ inventory_delete_item :: proc ( inv:^PlayerInventory, deletion_index:int) -> int
     for i in 0..<MAX_ITEMS_IN_INVENTORY {
         if(inv.inv_item[i].next_item_index != deletion_index){continue;};
         inv.inv_item[i].next_item_index = inv.inv_item[deletion_index].next_item_index;
-        inv.tail_index = i;
+        inv.tail_index = cast(i8)i;
         mem.zero(&inv.inv_item[deletion_index], 1)
         inv.occupied[deletion_index] = false;
         inv.number_of_items_held -= 1;
@@ -978,22 +936,30 @@ blit_general_string ::  proc (duration:int, using payload:^GlobalSurfaces, str:s
     text  := str
     LIMIT :: LENGTH_OF_CHAR_BUFFER_ARRAY
     word_search: for len(text) != 0 {
-        if len(text) < LIMIT {append(&new_strings, text);break;}
-        cutoff_point: int
-        newline_found := false
+        if len(text) < LIMIT {
+            for search_idx in 0..<len(text) {
+                if text[search_idx] != '\n' do continue
+                cutoff_point := search_idx;
+                append(&new_strings, text[: cutoff_point ])
+                text = text[cutoff_point+1:len(text)]
+                break 
+            }
+            append(&new_strings, text)
+            break word_search
+        } 
         for search_idx in 0..<LIMIT {
             if text[search_idx] != '\n' do continue
-            cutoff_point = search_idx; newline_found = true; break
+            append(&new_strings, text[:search_idx])
+            text = text[search_idx+1:]
+            continue word_search
         }
-        if !newline_found{
-            for back_search_idx in 0..<LIMIT { // search backwards for first whitespace
-                if text [LIMIT - back_search_idx - 1] != ' ' do continue
-                cutoff_point = back_search_idx; break;
-            }
+        cutoff_point: int
+        for back_search_idx in 0..<LIMIT { // search backwards for first whitespace
+            if text [LIMIT - back_search_idx - 1] != ' ' do continue
+            append(&new_strings, text[:LIMIT - back_search_idx])
+            text = text[LIMIT - back_search_idx:] // reduce slice
+            continue word_search
         }
-
-        append(&new_strings, text[:LIMIT - cutoff_point])
-        text = text[LIMIT - cutoff_point:] // reduce slice
     }
 
     for string, idx in new_strings {
@@ -1124,13 +1090,13 @@ handle_command :: proc (
         case .Inventory: game_mode = ._Inventory;
         case .ListExits: using view_data
             context.allocator = context.temp_allocator
-            defer context.allocator = runtime.default_allocator()
             viewnames:[dynamic]string
             for view in VIEW_ENUMS {
                 if view_type[view] == .LookInside do continue
                 if view in adjascent_views[current_view_idx] do append(&viewnames, reflect.enum_string(view))
             }
-            str = strings.concatenate({"Current exits:\n", strings.join(viewnames[:], ", ")})
+            gronk := strings.join(viewnames[:], ", ")
+            str = strings.concatenate({"Current exits:\n", gronk})
         case .Invalid, .Exit:{};
     }
 };
@@ -1224,7 +1190,7 @@ init_player_item_data :: proc (s:^Item_State, view_data:^ViewData){
 
 main :: proc (){
 	using sdl2;
-    if( Init( INIT_VIDEO ) < 0 ){
+    if Init( INIT_VIDEO ) < 0 {
         fmt.printf( "SDL could not initialize! SDL_Error: %s\n", sdl2.GetError() );
         return;
     } 
@@ -1232,9 +1198,39 @@ main :: proc (){
     frameDuration :: 1000 / FPS;
     ge:GlobalEverything;
 	init_everything(&ge)
+    alexei_start:DialogueNode = {
+        dialogue_text = "Your time is nigh.\n...Repent!",
+    };
+    alexei_second:DialogueNode = {
+        dialogue_text = "...Else into the hole with you!", 
+        parent_node = &alexei_start,
+    };
+    alexei_third_1:DialogueNode = {
+        selection_option = "Hole?", 
+        dialogue_text = "Yes, hole.\nThe deep hole has many sharp bits. It will be hard to fish you out.",
+        parent_node = &alexei_second,
+    };
+    alexei_third_2:DialogueNode = {
+        selection_option = "I'm not repenting.", 
+        dialogue_text = "Alexei shakes his head. You're already in deep.",
+        parent_node = &alexei_second,
+    };
+    alexei_dialogue:[4]^DialogueNode = {&alexei_start, &alexei_second, &alexei_third_1, &alexei_third_2};
 
+    init_dialogue_nodes :: proc (nodes:[]^DialogueNode){
+        for x, i in nodes {
+            if(nodes[i].parent_node == nil){continue;};
+            child_node_index := nodes[i].parent_node.number_of_child_nodes;
+            nodes[i].parent_node.child_nodes[child_node_index] =  nodes[i];
+            nodes[i].parent_node.number_of_child_nodes += 1;
+        };
+    };
+    init_dialogue_nodes(alexei_dialogue[:])
+    ge.dialogue_data.starter_nodes[.ALEXEI] = alexei_dialogue[0]
     text_buffer:InputTextBuffer;
     //NOTE: Fix text
+
+
 	using ge;
 
     saveFileHandle, err := os.open("save.dat", os.O_RDONLY)
