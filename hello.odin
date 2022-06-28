@@ -218,10 +218,6 @@ render_inventory :: proc (using ge:^GlobalEverything, ){
     selected_item_enum, ok := inventory_get_nth_item(&player_inv, selected_item_in_inventory_index);
 
     using player_items
-    fmt.printf("Index selected %v \n", selected_item_in_inventory_index)
-    fmt.printf("selected item %v , current desc num: %v \n", reflect.enum_string(selected_item_enum), current_description[selected_item_enum])
-    fmt.printf("Current string : %v \n", item_descriptions[selected_item_enum][current_description[selected_item_enum]])
-    fmt.printf("ok? : %v \n", ok)
     if ok do blit_general_string(1, &surfs, item_descriptions[selected_item_enum][current_description[selected_item_enum]])
     
     blit_text(&surfs, "  EXIT INVENTORY", surfs.font_rect.h * (MAX_ITEMS_IN_INVENTORY / 2), 0);
@@ -656,7 +652,6 @@ handle_savegame_io :: proc (mode:SAVEGAME_IO, save_data:^_SaveData){
     io_func := mode == .WRITE ? os.write : os.read
 
     saveFileHandle, err := os.open("save.dat", mode == .WRITE ? os.O_WRONLY : os.O_RDONLY);
-    fmt.printf("Err in handlefunc? -> %v", err)
     items_handled := 0;
     errno:os.Errno
 
@@ -737,21 +732,21 @@ handle_default_mode_event :: proc (event:^sdl2.Event, using ge:^GlobalEverything
             char_to_put := char_to_parse;
             t.charBuffer[t.elems_in_charBuffer] = char_to_put; 
             t.elems_in_charBuffer += 1;
-            fmt.printf("Chars in buffer:[%s] Length %i\n", t.charBuffer, t.elems_in_charBuffer);
+            // fmt.printf("Chars in buffer:[%s] Length %i\n", t.charBuffer, t.elems_in_charBuffer);
         case .KEYDOWN: #partial switch event.key.keysym.sym {
             case .BACKSPACE:
                 if t.elems_in_charBuffer == 0 do return;
                 t.charBuffer[t.elems_in_charBuffer - 1] = 0
                 t.elems_in_charBuffer -= 1;
-                fmt.printf("Chars in buffer:[%s] Length %i\n", t.charBuffer, t.elems_in_charBuffer);
+                // fmt.printf("Chars in buffer:[%s] Length %i\n", t.charBuffer, t.elems_in_charBuffer);
             case .RETURN:
                 for char in &t.charBuffer {
-                    switch char {case 'a'..='z': char -= 32}
+                    switch char {case 'a'..='z': char -= 32} //make uppercase
                 }
                 t.tokenBuffer = strings.split(string(t.charBuffer[0:t.elems_in_charBuffer]), " ")
-                fmt.printf("Tokens in buffer: ")
+                // fmt.printf("Tokens in buffer: ")
                 for token in t.tokenBuffer {fmt.printf("%s ,", token)}
-                fmt.printf("\n")
+                // fmt.printf("\n")
             }
     }
 };
