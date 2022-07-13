@@ -902,10 +902,10 @@ inventory_add_item :: proc (inv:^PlayerInventory, new_item:PLAYER_ITEM) -> i8 {
 };
 
 inventory_delete_item :: proc ( inv:^PlayerInventory, deletion_index:i8) -> int {
-    if(deletion_index == inv.origin_index){
+    if deletion_index == inv.origin_index {
         //TODO: ruh roh, whats going on here
         new_origin_index := inv.inv_item[inv.origin_index].next_item_index;
-        mem.zero(&inv.inv_item[inv.origin_index])
+        mem.zero(&inv.inv_item[inv.origin_index], 1)
         inv.occupied[inv.origin_index] = false;
         inv.number_of_items_held -= 1;
         return 0;
