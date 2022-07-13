@@ -147,7 +147,7 @@ render_dialogue :: proc (using ge:^GlobalEverything){
     portrait:= npc_portraits[current_npc]; 
     sdl2.BlitSurface(portrait, nil, working_surface, &portrait.clip_rect);
     blit_general_string(0, &surfs, current_node.dialogue_text)
-    if(number_of_options <= 1){return;}
+    if number_of_options <= 1 do return;
     for i in 0..<number_of_options {
         YPosition := (NATIVE_HEIGHT) - (font_rect.h * i32(number_of_options - (i*2) + 8 ));
         tile_to_blit := font_surface_array[char_to_index(cast(u8)' ')]
@@ -207,20 +207,23 @@ render_inventory :: proc (using ge:^GlobalEverything, ){
         };
     };
 
-    selected_item_in_inventory_index:int 
-    using ge.render_states
-    switch {
-        case inv.row_selected == (MAX_ITEMS_IN_INVENTORY / 2): selected_item_in_inventory_index = -1 // exit selected
-        case inv.left_column_selected: selected_item_in_inventory_index = inv.row_selected 
-        case: selected_item_in_inventory_index = inv.row_selected + (MAX_ITEMS_IN_INVENTORY / 2)
-    }
+    selected_item_in_inventory_index := #force_inline proc(using render_states:^GlobalRenderStates) -> int {
+        switch{
+            case inv.row_selected == (MAX_ITEMS_IN_INVENTORY / 2): return -1
+            case inv.left_column_selected: return inv.row_selected
+            case: return inv.row_selected + (MAX_ITEMS_IN_INVENTORY / 2)
+        }
+    }(&ge.render_states)
 
     selected_item_enum, ok := inventory_get_nth_item(&player_inv, selected_item_in_inventory_index);
 
-    using player_items
-    if ok do blit_general_string(1, &surfs, item_descriptions[selected_item_enum][current_description[selected_item_enum]])
+    if ok { using player_items;
+        current_desc_idx := current_description[selected_item_enum]
+        blit_general_string(1, &surfs, item_descriptions[selected_item_enum][current_desc_idx])
+    }
     
     blit_text(&surfs, "  EXIT INVENTORY", surfs.font_rect.h * (MAX_ITEMS_IN_INVENTORY / 2), 0);
+    using ge.render_states
     plus_x_pos :i32 = surfs.font_rect.h * i32(inv.row_selected) ;
     plus_y_pos :i32 = inv.left_column_selected ? surfs.font_rect.w : surfs.font_rect.w * 17; 
     blit_text(&surfs, "+", plus_x_pos, plus_y_pos);
@@ -491,10 +494,6 @@ char_to_index :: proc (_input:union{u8, int}) -> int{
         case: return -1;
     };
 };
-
-
-
-
 
 NPC_ENUM :: enum {
     ALEXEI,
@@ -906,7 +905,7 @@ inventory_delete_item :: proc ( inv:^PlayerInventory, deletion_index:i8) -> int 
     if(deletion_index == inv.origin_index){
         //TODO: ruh roh, whats going on here
         new_origin_index := inv.inv_item[inv.origin_index].next_item_index;
-        mem.zero(&inv.inv_item[inv.origin_index], 1)
+        mem.zero(&inv.inv_item[inv.origin_index])
         inv.occupied[inv.origin_index] = false;
         inv.number_of_items_held -= 1;
         return 0;
