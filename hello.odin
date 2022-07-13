@@ -92,18 +92,19 @@ ViewData :: struct {
     adjascent_views_num:[VIEW_ENUMS]int, // This and the above could be refactored as dynamic array
 };
 
+//TODO: child nodes as dynamic array
+//TODO: 
 DialogueNode :: struct {
     selection_option:string,// 
     dialogue_text:string,
     parent_node:^DialogueNode,
-    child_nodes:[5]^DialogueNode,
-    number_of_child_nodes:int,
+    child_nodes:[dynamic]^DialogueNode,
 };
 
 Text_RenderState :: struct {
     current_txt_anim: proc (int, ^GlobalSurfaces, string) -> int,
     duration_count:int,
-    temp_data:string, // Is this needed with future allocator stuff?
+    string_to_blit:string, // Is this needed with future allocator stuff?
 };
 
 Inventory_RenderState :: struct{
@@ -238,7 +239,7 @@ render_default := proc (using ge:^GlobalEverything, text_buffer:^InputTextBuffer
     }
     using render_states.txt
     if current_txt_anim != nil {
-        duration_count = current_txt_anim(duration_count, &surfs, temp_data);
+        duration_count = current_txt_anim(duration_count, &surfs, string_to_blit);
         if duration_count == -1 do mem.zero_item(&render_states.txt)
     } 
     if text_buffer.elems_in_charBuffer == 0 do return
@@ -698,21 +699,20 @@ replace_all_palettes :: proc (using ge:^GlobalEverything, new_room_pal_index:VIE
             detected_colour :u32 = u8RGB_To_u32_RGB888(red,green,blue)
             for colour, j in current_palette{
                 replace_color := current_palette[j];
-                if(detected_colour == replace_color){
+                if detected_colour == replace_color {
                     new_color := new_palette[j];
                     pixel_ptr^ = sdl2.MapRGB(target.format,RedOf(new_color),GreenOf(new_color),BlueOf(new_color));
                 };
             };
             pixel_ptr = mem.ptr_offset(pixel_ptr, 1)
-    
         };
     };
 
-    for pal_index in VIEW_ENUMS{
-        for char_sprite in &surfs.font_surface_array{
+    for pal_index in VIEW_ENUMS {
+        for char_sprite in &surfs.font_surface_array {
             if char_sprite != nil do replace_palette(char_sprite, room_palettes[pal_index], room_palettes[new_room_pal_index]);
         };
-        for q in &surfs.quill_array{
+        for q in &surfs.quill_array {
             replace_palette(q, room_palettes[pal_index], room_palettes[new_room_pal_index]);
         };
         for npc, i in surfs.npc_portraits {
@@ -750,10 +750,10 @@ handle_default_mode_event :: proc (event:^sdl2.Event, using ge:^GlobalEverything
     }
 };
 
-addTxtAnim :: proc (arr:^Text_RenderState, anim: proc (int, ^GlobalSurfaces, string) -> int, temp_data:Maybe(string)){
+addTxtAnim :: proc (arr:^Text_RenderState, anim: proc (int, ^GlobalSurfaces, string) -> int, blit_data:Maybe(string)){
     arr.current_txt_anim = anim;
     arr.duration_count = 240;
-    if temp_data != nil do arr.temp_data = temp_data.(string)
+    if blit_data != nil do arr.string_to_blit = blit_data.(string)
 };
 
 blit_text :: proc (using gs:^GlobalSurfaces, string_to_blit:string, YPosition:i32, XPosition:i32){
@@ -766,7 +766,7 @@ blit_text :: proc (using gs:^GlobalSurfaces, string_to_blit:string, YPosition:i3
     for i in 0..<len(string_to_blit){
         space_rect.x = i32(i) * 9 + XPosition;
         char_to_blit_idx := char_to_index(string_to_blit[i])
-        if (char_to_blit_idx == -1){continue}
+        if char_to_blit_idx == -1 do continue
         sdl2.BlitSurface(font_surface_array[char_to_blit_idx], nil, working_surface, &space_rect);
     };
 };
@@ -816,12 +816,12 @@ handle_dialogue_mode_event :: proc ( event:^sdl2.Event, using ge:^GlobalEverythi
     if event.type != .KEYDOWN do return;
     #partial switch event.key.keysym.sym {
         case .RETURN:
-            if current_node.number_of_child_nodes == 0 {
+            if len(current_node.child_nodes) == 0 {
                 game_mode = ._Default;
                 return;
             };
             current_node = current_node.child_nodes[selected_dialogue_option];
-            number_of_options = current_node.number_of_child_nodes;
+            number_of_options = len(current_node.child_nodes);
             selected_dialogue_option = 0;
         case .UP:
             if current_node.child_nodes[1] == nil do break
@@ -868,7 +868,7 @@ LookModifier :: enum {
     _LookInside,
 };
 
-parse_look_modifier :: proc ( str:string) -> LookModifier{
+parse_look_modifier :: proc ( str:string) -> LookModifier {
     switch str {
         case "IN", "WITHIN", "INSIDE": return ._LookInside;
     }
@@ -880,7 +880,7 @@ inventory_add_item :: proc (inv:^PlayerInventory, new_item:PLAYER_ITEM) -> i8 {
     new_inv_item.item_enum = new_item;
     new_inv_item.next_item_index = -1;
 
-    if(inv.tail_index == -1){
+    if inv.tail_index == -1 {
         inv.inv_item[0] = new_inv_item;
         inv.occupied[0] = true;
         inv.tail_index = 0;
@@ -975,7 +975,7 @@ handle_command :: proc (
     using text_buffer
 
     str:Maybe(string) = nil
-    defer {if str != nil do addTxtAnim(&render_states.txt, blit_general_string, str);}
+    defer if str != nil do addTxtAnim(&render_states.txt, blit_general_string, str);
 
     switch(command){
         case .Save: 
@@ -1127,7 +1127,6 @@ init_player_item_data :: proc (s:^Item_State, view_data:^ViewData){
         number_of_items_in_view[room_enum] += 1
         index_within_inventory[idx] -= 1;
         current_number_of_items += 1;
-    
     };
 
     add_scenery_item :: proc (using scenery_items:^SceneryItemData, name:string, description:string){
@@ -1212,11 +1211,14 @@ main :: proc (){
     alexei_dialogue:[4]^DialogueNode = {&alexei_start, &alexei_second, &alexei_third_1, &alexei_third_2};
 
     init_dialogue_nodes :: proc (nodes:[]^DialogueNode){
-        for x, i in nodes {
-            if(nodes[i].parent_node == nil){continue;};
-            child_node_index := nodes[i].parent_node.number_of_child_nodes;
-            nodes[i].parent_node.child_nodes[child_node_index] =  nodes[i];
-            nodes[i].parent_node.number_of_child_nodes += 1;
+        // for node in nodes {
+        //     node.child_nodes = make_dynamic_array([dynamic]^DialogueNode)
+        // }
+        for node in nodes {
+            node.child_nodes = make_dynamic_array([dynamic]^DialogueNode)
+            if node.parent_node == nil do continue;
+            child_node_index := len(node.parent_node.child_nodes);
+            append(&node.parent_node.child_nodes, node)
         };
     };
     init_dialogue_nodes(alexei_dialogue[:])
