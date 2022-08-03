@@ -61,7 +61,7 @@ GlobalSurfaces :: struct {
     view_background_surfaces:[VIEW_ENUMS]^sdl2.Surface,
     quill_array:[LENGTH_OF_QUILL_ARRAY]^sdl2.Surface,
     // Better solution needed, to get rid of dead data? Irrelevant for now?
-    item_in_view_surfaces:[PLAYER_ITEM][VIEW_ENUMS]^sdl2.Surface,
+    item_in_view_surfaces:[PLAYER_ITEM][VIEW_ENUMS]^sdl2.Surface, // should be dynamic array of {VIEW_ENUM, PLAYER_ITEM, STATE_INT}
     item_points_in_view:[PLAYER_ITEM][VIEW_ENUMS]Point_i32,
     npc_portraits:[NPC_ENUM]^sdl2.Surface,
     npc_standing:[NPC_ENUM]^sdl2.Surface,
@@ -76,16 +76,16 @@ GameSettings :: struct {
 SceneryItemData :: struct {
     item_name:[MAX_NUMBER_OF_SCENERY_ITEMS]string,
     item_descriptions:[MAX_NUMBER_OF_SCENERY_ITEMS][dynamic]string,
-    synonyms:[MAX_NUMBER_OF_SCENERY_ITEMS][MAX_NUMBER_OF_SYNONYMS]string,
-    current_description:[MAX_NUMBER_OF_SCENERY_ITEMS]int,
-    number_of_items:int,
+    synonyms:[MAX_NUMBER_OF_SCENERY_ITEMS][MAX_NUMBER_OF_SYNONYMS]string, // To be put into another struct
+    current_description:[MAX_NUMBER_OF_SCENERY_ITEMS]int, //Redundant with item state
+    number_of_items:int, //Redundant with dynarray
 };
 
 ViewData :: struct {
     current_view_idx: VIEW_ENUMS, 
     npc_in_room:[VIEW_ENUMS]Maybe(NPC_ENUM),
     npc_description:[NPC_ENUM]string,
-    scenery_items:[VIEW_ENUMS]SceneryItemData,
+    scenery_items:[VIEW_ENUMS]SceneryItemData, //thonk
     events:[VIEW_ENUMS]EventData,
     view_type:[VIEW_ENUMS]ViewType,
     adjascent_views:[VIEW_ENUMS]bit_set[VIEW_ENUMS], // adjascent_views[view_to_query][is_this_adjascent]
@@ -93,7 +93,7 @@ ViewData :: struct {
 };
 
 //TODO: child nodes as dynamic array
-//TODO: 
+
 DialogueNode :: struct {
     selection_option:string,// 
     dialogue_text:string,
@@ -526,14 +526,12 @@ PlayerInventory :: struct {
     origin_index:i8,
     number_of_items_held:int,
 };
-SCENERY_ITEM :: distinct string
-ITEM_DESCRIPTION_CASE :: distinct string
 
 PlayerItemData :: struct {
     item_descriptions:[PLAYER_ITEM][dynamic]string,
     synonyms:[PLAYER_ITEM][MAX_NUMBER_OF_SYNONYMS]string,
     current_description:[PLAYER_ITEM]int,
-    is_takeable_item:bit_set[PLAYER_ITEM], 
+    is_takeable_item:bit_set[PLAYER_ITEM], // Probably handle-able with unique item enum states?
     is_item_taken:bit_set[PLAYER_ITEM],
     current_room_location:[PLAYER_ITEM]Maybe(VIEW_ENUMS),
     number_of_items_in_view:[VIEW_ENUMS]int,
@@ -1211,9 +1209,6 @@ main :: proc (){
     alexei_dialogue:[4]^DialogueNode = {&alexei_start, &alexei_second, &alexei_third_1, &alexei_third_2};
 
     init_dialogue_nodes :: proc (nodes:[]^DialogueNode){
-        // for node in nodes {
-        //     node.child_nodes = make_dynamic_array([dynamic]^DialogueNode)
-        // }
         for node in nodes {
             node.child_nodes = make_dynamic_array([dynamic]^DialogueNode)
             if node.parent_node == nil do continue;
@@ -1269,7 +1264,7 @@ main :: proc (){
 		sdl2.StartTextInput()
         frameStart := sdl2.GetTicks();
         event:sdl2.Event;
-        for( sdl2.PollEvent( &event ) != 0 ){
+        for( sdl2.PollEvent( &event ) != false ){
             if (event.type == .QUIT){settings.quit = true;break;};
             switch(game_mode){
                 case ._Default, ._LookInside: handle_default_mode_event(&event, &ge, &text_buffer);
