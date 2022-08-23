@@ -25,7 +25,7 @@ PALETTE :: enum {
     Church, Clearing, Skete,
 }
 
-VIEW_ENUMS :: enum {
+VIEW_ENUM :: enum {
 	CHURCH, CLEARING, SKETE, CHAPEL, SHRINE,
 }
 
@@ -58,11 +58,11 @@ GameMode :: enum {
 GlobalSurfaces :: struct {
     working_surface:^sdl2.Surface ,
     font_surface_array:[96]^sdl2.Surface,
-    view_background_surfaces:[VIEW_ENUMS]^sdl2.Surface,
+    view_background_surfaces:[VIEW_ENUM]^sdl2.Surface,
     quill_array:[LENGTH_OF_QUILL_ARRAY]^sdl2.Surface,
     // Better solution needed, to get rid of dead data? Irrelevant for now?
-    item_in_view_surfaces:[PLAYER_ITEM][VIEW_ENUMS]^sdl2.Surface, // should be dynamic array of {VIEW_ENUM, PLAYER_ITEM, STATE_INT}
-    item_points_in_view:[PLAYER_ITEM][VIEW_ENUMS]Point_i32,
+    item_in_view_surfaces:[PLAYER_ITEM][VIEW_ENUM]^sdl2.Surface, // should be dynamic array of {VIEW_ENUM, PLAYER_ITEM, STATE_INT}
+    item_points_view_location:[PLAYER_ITEM][VIEW_ENUM]Point_i32,
     npc_portraits:[NPC_ENUM]^sdl2.Surface,
     npc_standing:[NPC_ENUM]^sdl2.Surface,
     font_rect: sdl2.Rect,
@@ -74,23 +74,21 @@ GameSettings :: struct {
 };
 
 SceneryItemData :: struct {
-	sceneryItemNames:[VIEW_ENUMS][dynamic]string,
-	enum_state:[VIEW_ENUMS][dynamic]int,
-	descriptions:[VIEW_ENUMS][dynamic][]string,
+	sceneryItemNames:[VIEW_ENUM][dynamic]string,
+	enum_state:[VIEW_ENUM][dynamic]int,
+	descriptions:[VIEW_ENUM][dynamic][]string,
 }
 
 ViewData :: struct {
-    current_view_idx: VIEW_ENUMS, 
-    npc_in_room:[VIEW_ENUMS]Maybe(NPC_ENUM),
+    current_view_idx: VIEW_ENUM, 
+    npc_in_room:[VIEW_ENUM]Maybe(NPC_ENUM),
     npc_description:[NPC_ENUM]string,
     scenery_items:SceneryItemData, //thonk
-    events:[VIEW_ENUMS]EventData,
-    view_type:[VIEW_ENUMS]ViewType,
-    adjascent_views:[VIEW_ENUMS]bit_set[VIEW_ENUMS], // adjascent_views[view_to_query][is_this_adjascent]
-    adjascent_views_num:[VIEW_ENUMS]int, // This and the above could be refactored as dynamic array
+    events:[VIEW_ENUM]EventData,
+    view_type:[VIEW_ENUM]ViewType,
+    adjascent_views:[VIEW_ENUM]bit_set[VIEW_ENUM], // adjascent_views[view_to_query][is_this_adjascent]
+    adjascent_views_num:[VIEW_ENUM]int, // This and the above could be refactored as dynamic array
 };
-
-//TODO: child nodes as dynamic array
 
 DialogueNode :: struct {
     selection_option:string,// 
@@ -139,7 +137,7 @@ GlobalEverything :: struct {
     view_data:ViewData,
     game_mode:GameMode,
     palettes:[PALETTE][4]u32,
-    room_palettes:[VIEW_ENUMS]^[4]u32,
+    room_palettes:[VIEW_ENUM]^[4]u32,
     dialogue_data:DialogueData,
     item_state:Item_State,
     render_states:GlobalRenderStates,
@@ -223,8 +221,8 @@ render_inventory :: proc (using ge:^GlobalEverything, ){
     selected_item_enum, ok := inventory_get_nth_item(&player_inv, selected_item_in_inventory_index);
 
     if ok { using player_items;
-        current_desc_idx := current_description[selected_item_enum]
-        blit_general_string(1, &surfs, item_descriptions[selected_item_enum][current_desc_idx])
+        current_desc_idx := player_items.inventory_data.enum_state[selected_item_enum]
+        blit_general_string(1, &surfs, inventory_data.descriptions[selected_item_enum][current_desc_idx])
     }
     
     blit_text(&surfs, "  EXIT INVENTORY", surfs.font_rect.h * (MAX_ITEMS_IN_INVENTORY / 2), 0);
@@ -283,13 +281,13 @@ StumpState :: enum {
 
 init_scenery_items :: proc (using view_data:^ViewData){
 
-    for view in VIEW_ENUMS {
+    for view in VIEW_ENUM {
 		scenery_items.sceneryItemNames[view] = make([dynamic]string)
 		scenery_items.enum_state[view] = make([dynamic]int)
 		scenery_items.descriptions[view] = make([dynamic][]string)
 	}
 
-    add_scenery_item :: proc(using data:^SceneryItemData, view:VIEW_ENUMS, name:string, _descriptions:..string){
+    add_scenery_item :: proc(using data:^SceneryItemData, view:VIEW_ENUM, name:string, _descriptions:..string){
         append(&sceneryItemNames[view], name)
         append(&enum_state[view], 0)
         append(&descriptions[view], slice.clone(_descriptions[:]))
@@ -315,7 +313,7 @@ init_scenery_items :: proc (using view_data:^ViewData){
 
     add_scenery_item(&scenery_items, .SKETE, "SKETE", "It is a sturdy, cozy skete.")
 
-    for view in VIEW_ENUMS {
+    for view in VIEW_ENUM {
         shrink(&scenery_items.descriptions[view])
         shrink(&scenery_items.enum_state[view])
         shrink(&scenery_items.sceneryItemNames[view])
@@ -409,7 +407,28 @@ global_arena: mem.Arena
 
 Synonym_SceneryItem :: struct {
 	name:string,
-	view:VIEW_ENUMS,
+	view:VIEW_ENUM,
+}
+add_synonym :: proc(data:^Synonyms, synonym:string, synonym_for:..union{PLAYER_ITEM,Synonym_SceneryItem}){
+    pItem_dynArray:[dynamic]PLAYER_ITEM; 
+    for x in synonym_for {
+        #partial switch v in x {
+            case PLAYER_ITEM: append(&pItem_dynArray, v);
+        }
+    }
+    shrink(&pItem_dynArray)
+
+    sItem_dynArray: [dynamic]Synonym_SceneryItem;
+    for x in synonym_for {
+        #partial switch v in x {
+            case Synonym_SceneryItem: append(&sItem_dynArray, v);
+        }
+    }
+    shrink(&sItem_dynArray)
+
+    append(&data.synonym, synonym)
+    append(&data.player_item, pItem_dynArray[:])
+    append(&data.scenery_item, sItem_dynArray[:])
 }
 
 init_everything :: proc (using ge:^GlobalEverything) {
@@ -472,28 +491,6 @@ init_everything :: proc (using ge:^GlobalEverything) {
 
     // Done
 	game_mode = ._Default
-
-    add_synonym :: proc(data:^Synonyms, synonym:string, synonym_for:..union{PLAYER_ITEM,Synonym_SceneryItem}){
-        pItem_dynArray:[dynamic]PLAYER_ITEM; 
-        for x in synonym_for {
-            #partial switch v in x {
-                case PLAYER_ITEM: append(&pItem_dynArray, v);
-            }
-        }
-        shrink(&pItem_dynArray)
-    
-        sItem_dynArray: [dynamic]Synonym_SceneryItem;
-        for x in synonym_for {
-            #partial switch v in x {
-                case Synonym_SceneryItem: append(&sItem_dynArray, v);
-            }
-        }
-        shrink(&sItem_dynArray)
-    
-        append(&data.synonym, synonym)
-        append(&data.player_item, pItem_dynArray[:])
-        append(&data.scenery_item, sItem_dynArray[:])
-    }
 
     init_player_item_data(&item_state, &ge.view_data, ge);
     render_states.inv.left_column_selected = true
@@ -582,15 +579,22 @@ PlayerInventory :: struct {
     number_of_items_held:int,
 };
 
+PlayerItemData_InView :: struct {
+	enum_state:[PLAYER_ITEM]int,
+	descriptions:[PLAYER_ITEM][]string,
+	view_location:[PLAYER_ITEM]Maybe(VIEW_ENUM),
+    is_takeable_item:bit_set[PLAYER_ITEM], 
+}
+
+PlayerItemData_InInventory :: struct {
+	enum_state:[PLAYER_ITEM]int,
+	descriptions:[PLAYER_ITEM][]string,
+	index_in_inventory:[PLAYER_ITEM]i8,
+}
+
 PlayerItemData :: struct {
-    item_descriptions:[PLAYER_ITEM][dynamic]string,
-    synonyms:[PLAYER_ITEM][MAX_NUMBER_OF_SYNONYMS]string,
-    current_description:[PLAYER_ITEM]int,
-    is_takeable_item:bit_set[PLAYER_ITEM], // Probably handle-able with unique item enum states?
-    is_item_taken:bit_set[PLAYER_ITEM],
-    current_room_location:[PLAYER_ITEM]Maybe(VIEW_ENUMS),
-    number_of_items_in_view:[VIEW_ENUMS]int,
-    index_within_inventory:[PLAYER_ITEM]i8,
+    inventory_data:PlayerItemData_InInventory,
+    in_view_data:PlayerItemData_InView,
 };
 
 PlaceEvent :: struct {
@@ -610,25 +614,44 @@ Item_State :: struct {
     player_items:PlayerItemData,
     events:EventData,
 };
+check_synonyms :: proc (search:string, room:VIEW_ENUM, data:^Synonyms) -> (union{[]string,[]PLAYER_ITEM}, bool) {
+	//Problem: Pre-sort by room? Grabble the data by room temproarily?
+	context.allocator = context.temp_allocator
+	for syn, idx in data.synonym {
+		if syn != search do continue;
+		switch {
+			case len(data.player_item[idx]) + len(data.scenery_item[idx]) > 1:
+				playeritemstrmap := slice.mapper(data.player_item[idx], cast(proc(PLAYER_ITEM) -> string)reflect.enum_string)
+				scenery_items_strs := slice.mapper(data.scenery_item[idx], proc(i:Synonym_SceneryItem) -> string {return i.name})
+				options := slice.concatenate([][]string{playeritemstrmap, scenery_items_strs})
+				return options, true
+			case len(data.player_item[idx]) == 1:  return data.player_item[idx], true
+			case: return []string{data.scenery_item[idx][0].name}, true
+		}
+	}
 
-check_item_synonyms :: proc (str:string, pid:^PlayerItemData) -> (PLAYER_ITEM, bool) {
-    for i, idx in pid.synonyms {
-        for j in 0..<MAX_NUMBER_OF_SYNONYMS {
-            if str == pid.synonyms[idx][j] do return idx, true
-        };
-    };
+	return []string{}, false
+}
+
+check_item_synonyms :: proc (str:string, ge:^GlobalEverything) -> (PLAYER_ITEM, bool) {
+    honk, ok := check_synonyms(str, ge.view_data.current_view_idx, &ge.synonyms)
+    switch v in honk {
+        case []PLAYER_ITEM:
+            if len(v) == 1 do return v[0], true
+        case []string:  assert(false, "uh-oh, string got back from check item synonyms")
+    }
     return nil, false
 };
 
-item_name_to_index :: proc (str:string, pid:^PlayerItemData) -> (item_enum:PLAYER_ITEM, ok:bool) {
+item_name_to_index :: proc (str:string, ge:^GlobalEverything) -> (item_enum:PLAYER_ITEM, ok:bool) {
     item_enum, ok = reflect.enum_from_name(PLAYER_ITEM, str)
     if(ok){
         return item_enum, ok
     }
-    return check_item_synonyms(str, pid)
+    return check_item_synonyms(str, ge)
 };
 
-scenery_item_name_to_index :: proc (name:string, ge:^GlobalEverything, view_idx:VIEW_ENUMS) -> (idx:int, ok:bool){
+scenery_item_name_to_index :: proc (name:string, ge:^GlobalEverything, view_idx:VIEW_ENUM) -> (idx:int, ok:bool){
     using ge.view_data
     for str, idx in scenery_items.sceneryItemNames[view_idx] {
         if name == str do return idx, true
@@ -654,7 +677,7 @@ handle_savedata_struct :: proc (mode:SAVEGAME_IO, save_data:^SaveData, ge:^Globa
     order_func(&save_data.view_data.current_view_idx, &ge.view_data.current_view_idx, 1)
     order_func(&save_data.view_data.npc_in_room, &ge.view_data.npc_in_room, 1)
 
-    for _ecase in VIEW_ENUMS {
+    for _ecase in VIEW_ENUM {
         for _int, idx in &save_data.view_data.scenery_items.enum_state[_ecase] {
             order_func(&_int, &ge.view_data.scenery_items.enum_state[_ecase][idx], 1)
         }
@@ -671,36 +694,37 @@ handle_savedata_struct :: proc (mode:SAVEGAME_IO, save_data:^SaveData, ge:^Globa
     order_func(&save_data.player_inventory.tail_index, &ge.item_state.player_inv.tail_index, 1)
     
     for idx in PLAYER_ITEM {
-        order_func(&save_data.item_data.current_description[idx], &ge.item_state.player_items.current_description[idx], 1)
-        order_func(&save_data.item_data.current_room_location[idx], &ge.item_state.player_items.current_room_location[idx], 1)
-        order_func(&save_data.item_data.index_within_inventory[idx], &ge.item_state.player_items.index_within_inventory[idx], 1)
+        order_func(&save_data.item_data.in_view_data.enum_state[idx], &ge.item_state.player_items.in_view_data.enum_state[idx], 1)
+        order_func(&save_data.item_data.in_view_data.view_location[idx], &ge.item_state.player_items.in_view_data.view_location[idx], 1)
+        order_func(&save_data.item_data.inventory_data.index_in_inventory[idx], &ge.item_state.player_items.inventory_data.index_in_inventory[idx], 1)
     }
-    order_func(&save_data.item_data.is_takeable_item, &ge.item_state.player_items.is_takeable_item, 1)
-    order_func(&save_data.item_data.is_item_taken, &ge.item_state.player_items.is_item_taken, 1)
-    for idx in VIEW_ENUMS {
-        order_func(&save_data.item_data.number_of_items_in_view[idx], &ge.item_state.player_items.number_of_items_in_view[idx], 1)
-    }
+    order_func(&save_data.item_data.in_view_data.is_takeable_item, &ge.item_state.player_items.in_view_data.is_takeable_item, 1)
+    // order_func(&save_data.item_data.is_item_taken, &ge.item_state.player_items.is_item_taken, 1)
     
 }
 
 SaveData :: struct {
     res_index:int,
     view_data: struct {
-        current_view_idx:VIEW_ENUMS,
-        npc_in_room:[VIEW_ENUMS]Maybe(NPC_ENUM),
+        current_view_idx:VIEW_ENUM,
+        npc_in_room:[VIEW_ENUM]Maybe(NPC_ENUM),
         scenery_items: struct {
-            enum_state:[VIEW_ENUMS][dynamic]int,
+            enum_state:[VIEW_ENUM][dynamic]int,
         },
-        adjascent_views:[VIEW_ENUMS]bit_set[VIEW_ENUMS],
-        adjascent_views_num:[VIEW_ENUMS]int, // Can this be derived from the number of 1s in the above?
+        adjascent_views:[VIEW_ENUM]bit_set[VIEW_ENUM],
+        adjascent_views_num:[VIEW_ENUM]int, // Can this be derived from the number of 1s in the above?
     },
     item_data: struct {
         current_description:[PLAYER_ITEM]int,
-        is_takeable_item:bit_set[PLAYER_ITEM], 
         is_item_taken:bit_set[PLAYER_ITEM],
-        current_room_location:[PLAYER_ITEM]Maybe(VIEW_ENUMS),
-        number_of_items_in_view:[VIEW_ENUMS]int,
-        index_within_inventory:[PLAYER_ITEM]int,
+        in_view_data: struct {
+            enum_state: [PLAYER_ITEM]int,
+            view_location:[PLAYER_ITEM]Maybe(VIEW_ENUM),
+            is_takeable_item:bit_set[PLAYER_ITEM], 
+        },
+        inventory_data : struct {
+            index_in_inventory:[PLAYER_ITEM]int,
+        },
     },
     player_inventory: PlayerInventory,
 
@@ -711,7 +735,7 @@ SAVEGAME_IO :: enum {
     WRITE,
 };
 
-handle_savegame_io :: proc (mode:SAVEGAME_IO, save_data:^SaveData){ // For file io
+handle_savedata_io :: proc (mode:SAVEGAME_IO, save_data:^SaveData){ // For file io
 
     io_func := mode == .WRITE ? os.write : os.read
 
@@ -721,12 +745,12 @@ handle_savegame_io :: proc (mode:SAVEGAME_IO, save_data:^SaveData){ // For file 
 
     items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.res_index));
     
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.index_within_inventory));
+    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.inventory_data.index_in_inventory));
     items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.is_item_taken));
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.is_takeable_item));
+    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.in_view_data.is_takeable_item));
     items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.current_description));
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.number_of_items_in_view));
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.current_room_location));
+    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.in_view_data.enum_state));
+    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.in_view_data.view_location));
 
     //Inventory Data
     items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.player_inventory.inv_item));
@@ -742,20 +766,19 @@ handle_savegame_io :: proc (mode:SAVEGAME_IO, save_data:^SaveData){ // For file 
     items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.view_data.adjascent_views_num));
 
     for saved_enum_state, idx in &save_data.view_data.scenery_items.enum_state {
-
         items_handled, errno = io_func(saveFileHandle,slice.to_bytes(saved_enum_state[:]));
     }
 
     os.close(saveFileHandle);
 };
 
-u8RGB_To_u32_RGB888 :: proc (R,G,B:u8) -> u32 {return (cast(u32)R << 16) | (cast(u32)G << 8) | cast(u32)B}
+u8RGB_To_u32_RGB888 :: #force_inline proc (R,G,B:u8) -> u32 {return (cast(u32)R << 16) | (cast(u32)G << 8) | cast(u32)B}
 
-RedOf :: proc (hexRGB888:u32) -> u8 {return u8(hexRGB888 >> 16) & 255}
-GreenOf :: proc (hexRGB888:u32) -> u8 {return u8(hexRGB888 >> 8) & 255}
-BlueOf :: proc (hexRGB888:u32) -> u8 {return u8(hexRGB888 & 255)}
+RedOf :: #force_inline proc (hexRGB888:u32) -> u8 {return u8(hexRGB888 >> 16) & 255}
+GreenOf :: #force_inline proc (hexRGB888:u32) -> u8 {return u8(hexRGB888 >> 8) & 255}
+BlueOf :: #force_inline proc (hexRGB888:u32) -> u8 {return u8(hexRGB888 & 255)}
 
-replace_all_palettes :: proc (using ge:^GlobalEverything, new_room_pal_index:VIEW_ENUMS){
+replace_all_palettes :: proc (using ge:^GlobalEverything, new_room_pal_index:VIEW_ENUM){
     replace_palette :: proc (target:^sdl2.Surface, current_palette:^[4]u32, new_palette:^[4]u32){
         // uint32_t* pixel_ptr = (uint32_t*)target.pixels;
         pixel_ptr := cast(^u32)target.pixels
@@ -774,7 +797,7 @@ replace_all_palettes :: proc (using ge:^GlobalEverything, new_room_pal_index:VIE
         };
     };
 
-    for pal_index in VIEW_ENUMS {
+    for pal_index in VIEW_ENUM {
         for char_sprite in &surfs.font_surface_array {
             if char_sprite != nil do replace_palette(char_sprite, room_palettes[pal_index], room_palettes[new_room_pal_index]);
         };
@@ -867,7 +890,7 @@ handle_menu_mode_event :: proc (event:^sdl2.Event,
                 render_surface^ = sdl2.GetWindowSurface(window);
             case 1:
                 save_data.res_index = res_option_index;
-                handle_savegame_io(.WRITE, &save_data);
+                handle_savedata_io(.WRITE, &save_data);
                 addTxtAnim(&ge.render_states.txt, save_animation,  nil);
                 game_mode = ._Default;
             case 2:
@@ -1055,13 +1078,13 @@ handle_command :: proc (
                     fmt.printf("\n")
                 }
             }
-            handle_savegame_io(.WRITE, &save_data);
+            handle_savedata_io(.WRITE, &save_data);
             addTxtAnim(&render_states.txt, save_animation,  nil);
         case .Menu: game_mode = ._Menu; 
         case .Quit: sdl2.PushEvent(&sdl2.Event{type = .QUIT});
         case .Go: using view_data;
             if len(tokenBuffer) == 1 {str = "Where would you like to go?";break;};
-            new_index, ok := reflect.enum_from_name(VIEW_ENUMS, tokenBuffer[1]);
+            new_index, ok := reflect.enum_from_name(VIEW_ENUM, tokenBuffer[1]);
             switch {
                 case ok && new_index == current_view_idx: str = "You're already here!"
                 case !ok || new_index not_in adjascent_views[current_view_idx]: str = fmt.aprintf( "'%s' isn't near here.", tokenBuffer[1])
@@ -1075,7 +1098,7 @@ handle_command :: proc (
             switch(parse_look_modifier(tokenBuffer[1])){
                 case ._LookInside: 
                     if(len(tokenBuffer) == 2){str = "What would you like to look in?"; break;};
-                    new_index, ok := reflect.enum_from_name(VIEW_ENUMS, tokenBuffer[2]);
+                    new_index, ok := reflect.enum_from_name(VIEW_ENUM, tokenBuffer[2]);
                     switch {
                         case tokenBuffer[2] == "INVENTORY": 
                             game_mode = ._Inventory;
@@ -1085,15 +1108,15 @@ handle_command :: proc (
                             str = "Cannot look inside there.";
                     }
                 case ._DefaultLook: 
-                    item_index, item_ok := item_name_to_index(tokenBuffer[1], &item_state.player_items);
+                    item_index, item_ok := item_name_to_index(tokenBuffer[1], ge);
                     scenery_item_index, scenery_ok := scenery_item_name_to_index(tokenBuffer[1], ge, current_view_idx);
                     npc_index, npc_ok := reflect.enum_from_name(NPC_ENUM, tokenBuffer[1])
                     switch {
                         case tokenBuffer[1] == "INVENTORY": 
                             game_mode = ._Inventory
                         case item_ok: using item_state.player_items;
-                            desc_idx := current_description[item_index]
-                            str = current_room_location[item_index] == current_view_idx ? item_descriptions[item_index][desc_idx]: fmt.aprintf("Cannot find the '%s'.", tokenBuffer[1])
+                            desc_idx := in_view_data.enum_state[item_index]
+                            str = in_view_data.view_location[item_index].(VIEW_ENUM) == current_view_idx ? in_view_data.descriptions[item_index][desc_idx]: fmt.aprintf("Cannot find the '%s'.", tokenBuffer[1])
                         case scenery_ok: 
                             enum_state_idx := scenery_items.enum_state[current_view_idx][scenery_item_index]
                             str = scenery_items.descriptions[current_view_idx][scenery_item_index][enum_state_idx]
@@ -1104,15 +1127,13 @@ handle_command :: proc (
                 }
         case .Take: using item_state;
             if len(tokenBuffer) == 1 {str = "What would you like to take?";break;};
-            item_index, ok := item_name_to_index(tokenBuffer[1], &player_items);
+            item_index, ok := item_name_to_index(tokenBuffer[1], ge);
             switch {
-                case !ok || player_items.current_room_location[item_index] != view_data.current_view_idx:
+                case !ok || player_items.in_view_data.view_location[item_index] != view_data.current_view_idx:
                     str = fmt.aprintf( "Cannot find the '%s'.", tokenBuffer[1])
                 case:
-                    player_items.is_item_taken += {item_index}
-                    player_items.current_room_location[item_index] = nil;
-                    player_items.number_of_items_in_view[view_data.current_view_idx] -=1;
-                    player_items.index_within_inventory[item_index] = inventory_add_item(&player_inv, item_index); // likely to be taken out
+                    player_items.in_view_data.view_location[item_index] = nil;
+                    player_items.inventory_data.index_in_inventory[item_index] = inventory_add_item(&player_inv, item_index); // likely to be taken out
         
                     if(view_data.events[view_data.current_view_idx].take_events[item_index] != nil){ //Do the event
                         view_data.events[view_data.current_view_idx].take_events[item_index](ge);
@@ -1121,14 +1142,20 @@ handle_command :: proc (
             }
         case .Place: using view_data
             if len(tokenBuffer) == 1 {str = "What would you like to place?";break;};
-            item_enum, ok := item_name_to_index(tokenBuffer[1], &item_state.player_items);
-            index_within_inventory := item_state.player_items.index_within_inventory[item_enum];
+            item_enum, ok := item_name_to_index(tokenBuffer[1], ge);
+            //TODO: Clean this up
+
             switch {
-                case !ok || index_within_inventory == -1:
+                case !ok:
                     str = fmt.aprintf( "You have no '%s'.", tokenBuffer[1])
                 case len(tokenBuffer) == 2:
                     str = "Where would you like to place it?"
+                case ok:
+                    if len(tokenBuffer) == 2 do str = "Where would you like to place it?"
+                    index_within_inventory := item_state.player_items.inventory_data.index_in_inventory[item_enum]
+                    if index_within_inventory == -1 do str = fmt.aprintf( "You have no '%s'.", tokenBuffer[1])
             }
+            if !ok || len(tokenBuffer) == 2 do break;
             destination_index, dest_ok := scenery_item_name_to_index(tokenBuffer[2], ge, current_view_idx);
             switch {
                 case !dest_ok: 
@@ -1139,10 +1166,8 @@ handle_command :: proc (
                     if(events[current_view_idx].place_events[item_enum].event != nil){
                         events[current_view_idx].place_events[item_enum].event(ge);
                     }
-                    item_state.player_items.is_item_taken -= {item_enum} 
-                    item_state.player_items.current_room_location[item_enum] = current_view_idx;
-                    item_state.player_items.number_of_items_in_view[current_view_idx] += 1;
-                    item_state.player_items.index_within_inventory[item_enum] = -1;
+                    item_state.player_items.in_view_data.view_location[item_enum] = current_view_idx;
+                    index_within_inventory := item_state.player_items.inventory_data.index_in_inventory[item_enum]
                     inventory_delete_item(&item_state.player_inv, index_within_inventory);
                     str = fmt.aprintf( "The '%s' is placed.", tokenBuffer[1])
             }
@@ -1161,7 +1186,7 @@ handle_command :: proc (
         case .ListExits: using view_data
             context.allocator = context.temp_allocator
             viewnames:[dynamic]string
-            for view in VIEW_ENUMS {
+            for view in VIEW_ENUM {
                 if view_type[view] == .LookInside do continue
                 if view in adjascent_views[current_view_idx] do append(&viewnames, reflect.enum_string(view))
             }
@@ -1183,42 +1208,31 @@ init_player_item_data :: proc (s:^Item_State, view_data:^ViewData, ge:^GlobalEve
 
 
     for i in PLAYER_ITEM {
-        s.player_items.current_room_location[i] = nil;
-        s.player_items.index_within_inventory[i] = -1;
-        s.player_items.is_item_taken -= {i}
+        s.player_items.in_view_data.view_location[i] = nil;
+        s.player_items.inventory_data.index_in_inventory[i] = -1;
     };
 
-    add_item_to_PlayerItemData :: proc (using player_items:^PlayerItemData, 
-        idx:PLAYER_ITEM, 
-        default_description:string,
-        is_takeable:bool,
-        room_enum:VIEW_ENUMS,
-        ){
-        @static  current_number_of_items := 0;
-        assert(current_number_of_items < MAX_INVENTORY_ITEMS);
-        item_descriptions[idx] = make([dynamic]string)
-        append(&item_descriptions[idx], default_description)
-        if is_takeable do is_takeable_item += {idx}
-        current_room_location[idx] = room_enum;
-        number_of_items_in_view[room_enum] += 1
-        index_within_inventory[idx] -= 1;
-        current_number_of_items += 1;
-    };
-
-
-    add_player_item_description :: proc (using player_items:^PlayerItemData, idx:PLAYER_ITEM, description:string){
-        append(&item_descriptions[idx], description)
+    add_playerItem_inView :: proc(data:^PlayerItemData_InView, in_view:Maybe(VIEW_ENUM), is_takeable:bool, item:PLAYER_ITEM, description:..string){
+        data.enum_state[item] = 0 ;
+        data.view_location[item] = in_view;
+        data.descriptions[item] = slice.clone(description[:])
+        if is_takeable do data.is_takeable_item += {item};
+    }
+    
+    add_playerItem_inventory :: proc(data:^PlayerItemData_InInventory, item:PLAYER_ITEM, description:..string){
+        data.enum_state[item] = 0 ;
+        data.index_in_inventory[item] = -1;
+        data.descriptions[item] = slice.clone(description[:])
     }
 
-    add_item_to_PlayerItemData(&s.player_items, .AXE, "The axe is stumpwise lodged.", true, .CLEARING);
-    add_player_item_description(&s.player_items, .AXE, "It's a well balanced axe. Much use.")
-    s.player_items.synonyms[.AXE][0] = "HATCHET"
+    add_playerItem_inView(&s.player_items.in_view_data, .CLEARING, true, .AXE, "The axe is stumpwise lodged.")
+    add_playerItem_inventory(&s.player_items.inventory_data, .AXE, "It's a well balanced axe. Much use.")
+    add_synonym(&ge.synonyms, "HATCHET", .AXE)
 
     take_axe_event :: proc (ge:^GlobalEverything){
         stump_index, ok := scenery_item_name_to_index("STUMP", ge, ge.view_data.current_view_idx);
         using ge.view_data
         scenery_items.enum_state[current_view_idx][stump_index] = cast(int)StumpState.Normal
-        ge.item_state.player_items.current_description[.AXE] = 1
     };
     view_data.events[.CLEARING].take_events[.AXE] = take_axe_event;
     axe_in_stump_event:PlaceEvent 
@@ -1228,16 +1242,17 @@ init_player_item_data :: proc (s:^Item_State, view_data:^ViewData, ge:^GlobalEve
         stump_index, _ := scenery_item_name_to_index("STUMP", ge,  ge.view_data.current_view_idx);
         using ge.view_data
         scenery_items.enum_state[current_view_idx][stump_index] = cast(int)StumpState.AxewiseStuck
-        ge.item_state.player_items.current_description[.AXE] = 0
     };
     
     axe_in_stump_event.event = place_axe_in_stump_event;
     view_data.events[.CLEARING].place_events[.AXE] = axe_in_stump_event;
 
     lazarus_icon_description :="An icon St Lazarus being raised from the dead by Christ."
-    add_item_to_PlayerItemData(&s.player_items, .LAZARUS_ICON, lazarus_icon_description, true, .SHRINE);
-    s.player_items.synonyms[.LAZARUS_ICON][0] = "ICON";
-    s.player_items.synonyms[.LAZARUS_ICON][1] = "LAZARUS";
+    add_playerItem_inView(&s.player_items.in_view_data, .SHRINE, true, .LAZARUS_ICON, lazarus_icon_description)
+    add_playerItem_inventory(&s.player_items.inventory_data, .LAZARUS_ICON, lazarus_icon_description)
+
+    add_synonym(&ge.synonyms, "ICON", .LAZARUS_ICON)
+    add_synonym(&ge.synonyms, "LAZARUS", .LAZARUS_ICON)
 
     icon_in_shrine_event:PlaceEvent;
     icon_in_shrine_event.scenery_dest_index, _ = scenery_item_name_to_index("SHRINE", ge, .CHURCH);
@@ -1295,25 +1310,22 @@ main :: proc (){
     fresh_game := err == os.ERROR_FILE_NOT_FOUND;
     os.close(saveFileHandle)
     init_save_data_struct(&save_data, &ge)
-    if (fresh_game){
-        fmt.printf("Fresh game \n")
-        createFileHandle, err := os.open("save.dat", os.O_CREATE)
-        os.close(createFileHandle)
-        handle_savegame_io(fresh_game ? .WRITE : .READ, &save_data);
+    switch fresh_game {
+        case true: 
+            newFile, err := os.open("save.dat", os.O_CREATE); os.close(newFile)
+            handle_savedata_io(.WRITE, &save_data);
+        case false:
+            handle_savedata_io(.READ, &save_data);
+            handle_savedata_struct(.READ, &save_data, &ge)
     }
-
-    if (!fresh_game){
-        handle_savegame_io(.READ, &save_data);
-        handle_savedata_struct(.READ, &save_data, &ge)
-    };
 
     replace_all_palettes(&ge, save_data.view_data.current_view_idx);
 
-    ge.settings.window_size = save_data.res_index + 1
+    settings.window_size = save_data.res_index + 1
     window := sdl2.CreateWindow("Searching for the Name", 
        	sdl2.WINDOWPOS_UNDEFINED,	sdl2.WINDOWPOS_UNDEFINED, 
-        i32(NATIVE_WIDTH * ge.settings.window_size), 
-        i32(NATIVE_HEIGHT * ge.settings.window_size), 
+        i32(NATIVE_WIDTH * settings.window_size), 
+        i32(NATIVE_HEIGHT * settings.window_size), 
         sdl2.WINDOW_SHOWN );
     if window == nil {
         fmt.printf( "Window could not be created! SDL_Error: %s\n", sdl2.GetError());
@@ -1350,7 +1362,7 @@ main :: proc (){
         sdl2.BlitSurface(surfs.view_background_surfaces[view_data.current_view_idx], nil, surfs.working_surface, nil); 
         for i in PLAYER_ITEM { //blit items
             using item_state.player_items, view_data, surfs
-            if i in is_item_taken do continue;
+            if item_state.player_items.in_view_data.view_location[i] != current_view_idx do continue;
             item_sprite := item_in_view_surfaces[i][current_view_idx];
             if item_sprite != nil do sdl2.BlitSurface(item_sprite, nil, working_surface, &item_sprite.clip_rect);
         };
