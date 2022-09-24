@@ -116,6 +116,7 @@ GlobalEverything :: struct {
     save_data:SaveData,
 };
 
+//TODO: Enbench to make a DerivedSaveData thing
 SaveData :: struct {
     res_index:int,
     view_data: struct {
@@ -127,16 +128,10 @@ SaveData :: struct {
         adjascent_views:[VIEW_ENUM]bit_set[VIEW_ENUM],
     },
     item_data: struct {
+        enum_state: [PLAYER_ITEM]int,
         current_description:[PLAYER_ITEM]int,
-        is_item_taken:bit_set[PLAYER_ITEM],
-        in_view_data: struct {
-            enum_state: [PLAYER_ITEM]int,
-            view_location:[PLAYER_ITEM]Maybe(VIEW_ENUM),
-            is_takeable_item:bit_set[PLAYER_ITEM], 
-        },
-        inventory_data : struct {
-            index_in_inventory:[PLAYER_ITEM]int,
-        },
+        index_in_inventory:[PLAYER_ITEM]int,
+        view_location:[PLAYER_ITEM]Maybe(VIEW_ENUM),
     },
     player_inventory: PlayerInventory,
 }
@@ -159,20 +154,9 @@ PlayerInventory :: struct {
     number_of_items_held:int,
 };
 
-PlayerItemData_InView :: struct {
-	enum_state:[PLAYER_ITEM]int,
-	descriptions:[PLAYER_ITEM][]string,
-	view_location:[PLAYER_ITEM]Maybe(VIEW_ENUM),
-    is_takeable_item:bit_set[PLAYER_ITEM], 
-}
-
-PlayerItemData_InInventory :: struct {
-	enum_state:[PLAYER_ITEM]int,
-	descriptions:[PLAYER_ITEM][]string,
-	index_in_inventory:[PLAYER_ITEM]i8,
-}
-
 PlayerItemData :: struct {
-    inventory_data:PlayerItemData_InInventory,
-    in_view_data:PlayerItemData_InView,
+    enum_state:[PLAYER_ITEM]int,
+    descriptions:[PLAYER_ITEM][]string,
+    index_in_inventory:[PLAYER_ITEM]i8,
+    view_location:[PLAYER_ITEM]Maybe(VIEW_ENUM),
 };

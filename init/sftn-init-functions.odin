@@ -32,11 +32,6 @@ char_to_index :: proc (_input:union{u8, int}) -> int{
     };
 };
 
-sliced :: proc(es: ^$A) -> [] intrinsics.type_elem_type(A) {
-    T :: intrinsics.type_elem_type(A)
-    return ([^]T)(es)[:len(es)]
-}
-
 add_scenery_item :: proc(using data:^SceneryItemData, view:VIEW_ENUM, name:string, _descriptions:..string){
     append(&sceneryItemNames[view], name)
     append(&enum_state[view], 0)
@@ -172,16 +167,9 @@ init_save_data_struct :: proc (save_data:^SaveData, ge:^GlobalEverything) {
     }
 }
 
-add_playerItem_inView :: proc(data:^PlayerItemData_InView, in_view:Maybe(VIEW_ENUM), is_takeable:bool, item:PLAYER_ITEM, description:..string){
+add_playerItem :: proc(data:^PlayerItemData, in_view:Maybe(VIEW_ENUM), item:PLAYER_ITEM, description:..string){
     data.enum_state[item] = 0 ;
     data.view_location[item] = in_view;
-    data.descriptions[item] = slice.clone(description[:])
-    if is_takeable do data.is_takeable_item += {item};
-}
-
-add_playerItem_inventory :: proc(data:^PlayerItemData_InInventory, item:PLAYER_ITEM, description:..string){
-    data.enum_state[item] = 0 ;
-    data.index_in_inventory[item] = -1;
     data.descriptions[item] = slice.clone(description[:])
 }
 
@@ -197,8 +185,8 @@ init_player_item_data_cold :: proc (s:^Item_State, view_data:^ViewData, ge:^Glob
 
 
     for i in PLAYER_ITEM {
-        s.player_items.in_view_data.view_location[i] = nil;
-        s.player_items.inventory_data.index_in_inventory[i] = -1;
+        s.player_items.view_location[i] = nil;
+        s.player_items.index_in_inventory[i] = -1;
     };
     init_player_item_data_hot(s)
     add_synonyms_hot(ge)

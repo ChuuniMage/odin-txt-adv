@@ -1,4 +1,6 @@
 package init;
+import "core:slice"
+
 
 add_scenery_items_hot :: proc (scenery_items:^SceneryItemData){
     add_scenery_item(scenery_items, .CHURCH, "CHURCH", "Dedicated to Saint Lazarus, this modest Church stands strong.");
@@ -9,8 +11,8 @@ add_scenery_items_hot :: proc (scenery_items:^SceneryItemData){
     add_scenery_item(scenery_items, .CLEARING, "CLEARING", "A quiet clearing. A good place to find lazy trees.");
     add_scenery_item(scenery_items, .CLEARING, "TREES", "Loitering in the clearing, the trees don't have much to do." );
 
-    add_scenery_item(scenery_items, .CLEARING, "STUMP", ..sliced(&vSTUMP_ItemState_view_descriptions));
-
+    add_scenery_item(scenery_items, .CLEARING, "STUMP", ..slice.enumerated_array(&vSTUMP_ItemState_view_descriptions));
+    
     add_scenery_item(scenery_items, .SHRINE, "SHRINE", "Almost like a miniature church, the shrine keeps travellers hopes in a travel-sized temple.");
     add_scenery_item(scenery_items, .SHRINE, "CANDLE", "A sleeping soldier of metal and oil waits for its next call to duty.");
 
@@ -19,13 +21,9 @@ add_scenery_items_hot :: proc (scenery_items:^SceneryItemData){
 }
 
 init_player_item_data_hot :: proc (s:^Item_State) {
-    add_playerItem_inView(&s.player_items.in_view_data, .CLEARING, true, .AXE, "The axe is stumpwise lodged.")
-    add_playerItem_inventory(&s.player_items.inventory_data, .AXE, "It's a well balanced axe. Much use.")
+    add_playerItem(&s.player_items, .CLEARING, .AXE, ..slice.enumerated_array(&AXE_ItemState_view_descriptions))
     lazarus_icon_description :="An icon St Lazarus being raised from the dead by Christ."
-    add_playerItem_inView(&s.player_items.in_view_data, .SHRINE, true, .LAZARUS_ICON, lazarus_icon_description)
-    add_playerItem_inventory(&s.player_items.inventory_data, .LAZARUS_ICON, lazarus_icon_description)
-
-
+    add_playerItem(&s.player_items, .SHRINE, .LAZARUS_ICON, lazarus_icon_description)
 }
 
 add_synonyms_hot :: proc (ge:^GlobalEverything) {

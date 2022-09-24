@@ -27,8 +27,8 @@ vSTUMP_ItemState :: enum {
 }
 
 AXE_ItemState :: enum {
- 	Default,
-	StumpwiseLodged,
+	v_StumpwiseLodged,
+	i_Default,
 }
 
 LAZARUS_ICON_ItemState :: enum {
@@ -59,7 +59,7 @@ vSTUMP_ItemState_view_descriptions := [vSTUMP_ItemState] string {
 }
 
 AXE_ItemState_view_descriptions := [AXE_ItemState] string {
-	.Default = "The axe is stumpwise lodged.",
-	.StumpwiseLodged = "The axe is stumpwise lodged.",
+	.i_Default = "A well balanced axe. Much use.",
+	.v_StumpwiseLodged = "The axe is stumpwise lodged.",
 }
 

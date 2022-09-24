@@ -88,8 +88,8 @@ render_inventory :: proc (using ge:^init.GlobalEverything, ){
     selected_item_enum, ok := inventory_get_nth_item(&player_inv, selected_item_in_inventory_index);
 
     if ok { using player_items;
-        current_desc_idx := player_items.inventory_data.enum_state[selected_item_enum]
-        blit_general_string(1, &surfs, inventory_data.descriptions[selected_item_enum][current_desc_idx])
+        current_desc_idx := player_items.enum_state[selected_item_enum]
+        blit_general_string(1, &surfs, descriptions[selected_item_enum][current_desc_idx])
     }
     
     blit_text(&surfs, "  EXIT INVENTORY", surfs.font_rect.h * (init.MAX_ITEMS_IN_INVENTORY / 2), 0);
@@ -229,11 +229,10 @@ handle_savedata_struct :: proc (mode:SAVEGAME_IO, save_data:^init.SaveData, ge:^
     order_func(&save_data.player_inventory.tail_index, &ge.item_state.player_inv.tail_index, 1)
     
     for idx in init.PLAYER_ITEM {
-        order_func(&save_data.item_data.in_view_data.enum_state[idx], &ge.item_state.player_items.in_view_data.enum_state[idx], 1)
-        order_func(&save_data.item_data.in_view_data.view_location[idx], &ge.item_state.player_items.in_view_data.view_location[idx], 1)
-        order_func(&save_data.item_data.inventory_data.index_in_inventory[idx], &ge.item_state.player_items.inventory_data.index_in_inventory[idx], 1)
+        order_func(&save_data.item_data.enum_state[idx], &ge.item_state.player_items.enum_state[idx], 1)
+        order_func(&save_data.item_data.view_location[idx], &ge.item_state.player_items.view_location[idx], 1)
+        order_func(&save_data.item_data.index_in_inventory[idx], &ge.item_state.player_items.index_in_inventory[idx], 1)
     }
-    order_func(&save_data.item_data.in_view_data.is_takeable_item, &ge.item_state.player_items.in_view_data.is_takeable_item, 1)
     // order_func(&save_data.item_data.is_item_taken, &ge.item_state.player_items.is_item_taken, 1)
     
 }
@@ -252,12 +251,10 @@ handle_savedata_io :: proc (mode:SAVEGAME_IO, save_data:^init.SaveData){ // For 
     io_func(saveFileHandle, mem.any_to_bytes(save_data.res_index));
 
     fmt.printf("Item data: %#v\n", save_data.item_data)
-    io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.inventory_data.index_in_inventory));
-    io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.is_item_taken));
-    io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.in_view_data.is_takeable_item));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.index_in_inventory));
     io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.current_description));
-    io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.in_view_data.enum_state));
-    io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.in_view_data.view_location));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.enum_state));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.view_location));
 
     //Inventory Data
 
@@ -631,9 +628,9 @@ handle_command :: proc (
                         case tokenBuffer[1] == "INVENTORY": 
                             game_mode = ._Inventory
                         case item_ok: using item_state.player_items;
-                            desc_idx := in_view_data.enum_state[item_index]
+                            desc_idx := enum_state[item_index]
                             str = init.PLAYER_ITEM_inv_descriptions[item_index]
-                            str = in_view_data.view_location[item_index].(init.VIEW_ENUM) == current_view_idx ? in_view_data.descriptions[item_index][desc_idx]: fmt.aprintf("Cannot find the '%s'.", tokenBuffer[1])
+                            str = view_location[item_index].(init.VIEW_ENUM) == current_view_idx ? descriptions[item_index][desc_idx]: fmt.aprintf("Cannot find the '%s'.", tokenBuffer[1])
                         case scenery_ok: 
                             enum_state_idx := scenery_items.enum_state[current_view_idx][scenery_item_index]
                             str = scenery_items.descriptions[current_view_idx][scenery_item_index][enum_state_idx]
@@ -646,11 +643,11 @@ handle_command :: proc (
             if len(tokenBuffer) == 1 {str = "What would you like to take?";break;};
             item_index, ok := item_name_to_index(tokenBuffer[1], ge);
             switch {
-                case !ok || player_items.in_view_data.view_location[item_index] != view_data.current_view_idx:
+                case !ok || player_items.view_location[item_index] != view_data.current_view_idx:
                     str = fmt.aprintf( "Cannot find the '%s'.", tokenBuffer[1])
                 case:
-                    player_items.in_view_data.view_location[item_index] = nil;
-                    player_items.inventory_data.index_in_inventory[item_index] = inventory_add_item(&player_inv, item_index); // likely to be taken out
+                    player_items.view_location[item_index] = nil;
+                    player_items.index_in_inventory[item_index] = inventory_add_item(&player_inv, item_index); // likely to be taken out
         
                     if(view_data.events[view_data.current_view_idx].take_events[item_index] != nil){ //Do the event
                         view_data.events[view_data.current_view_idx].take_events[item_index](ge);
@@ -669,7 +666,7 @@ handle_command :: proc (
                     str = "Where would you like to place it?"
                 case ok:
                     if len(tokenBuffer) == 2 do str = "Where would you like to place it?"
-                    index_within_inventory := item_state.player_items.inventory_data.index_in_inventory[item_enum]
+                    index_within_inventory := item_state.player_items.index_in_inventory[item_enum]
                     if index_within_inventory == -1 do str = fmt.aprintf( "You have no '%s'.", tokenBuffer[1])
             }
             if !ok || len(tokenBuffer) == 2 do break;
@@ -683,8 +680,8 @@ handle_command :: proc (
                     if(events[current_view_idx].place_events[item_enum].event != nil){
                         events[current_view_idx].place_events[item_enum].event(ge);
                     }
-                    item_state.player_items.in_view_data.view_location[item_enum] = current_view_idx;
-                    index_within_inventory := item_state.player_items.inventory_data.index_in_inventory[item_enum]
+                    item_state.player_items.view_location[item_enum] = current_view_idx;
+                    index_within_inventory := item_state.player_items.index_in_inventory[item_enum]
                     inventory_delete_item(&item_state.player_inv, index_within_inventory);
                     str = fmt.aprintf( "The '%s' is placed.", tokenBuffer[1])
             }
@@ -813,7 +810,7 @@ main :: proc (){
         sdl2.BlitSurface(surfs.view_background_surfaces[view_data.current_view_idx], nil, surfs.working_surface, nil); 
         for i in init.PLAYER_ITEM { //blit items
             using item_state.player_items, view_data, surfs
-            if item_state.player_items.in_view_data.view_location[i] != current_view_idx do continue;
+            if item_state.player_items.view_location[i] != current_view_idx do continue;
             item_sprite := item_in_view_surfaces[i][current_view_idx];
             if item_sprite != nil do sdl2.BlitSurface(item_sprite, nil, working_surface, &item_sprite.clip_rect);
         };
