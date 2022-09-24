@@ -5,147 +5,14 @@ import "core:strings";
 import "core:slice";
 import "core:os";
 import "vendor:sdl2";
+import "init"
 
 NATIVE_WIDTH :: 320
 NATIVE_HEIGHT :: 200
 
 LENGTH_OF_CHAR_BUFFER_ARRAY :: 36
-LENGTH_OF_QUILL_ARRAY :: 4
 
-MAX_NUMBER_OF_SCENERY_ITEMS :: 16
-MAX_INVENTORY_ITEMS :: 16
-MAX_NUMBER_OF_SYNONYMS :: 8
-
-Point_i32 :: struct {
-    x:i32,
-    y:i32,
-}
-
-PALETTE :: enum {
-    Church, Clearing, Skete,
-}
-
-VIEW_ENUM :: enum {
-	CHURCH, CLEARING, SKETE, CHAPEL, SHRINE,
-}
-
-ViewType :: enum {
-    Room, LookInside,
-}
-
-ValidCommand :: enum  {
-    Quit,
-    Menu,
-    Invalid,
-    Save,
-    Go,
-    Look,
-    Take,
-    Place,
-    Inventory,
-    Talk,
-    ListExits,
-    Exit,
-};
-
-GameMode :: enum {
-    _Default,
-    _Menu,
-    _Inventory,
-    _Dialogue,
-    _LookInside,
-};
-GlobalSurfaces :: struct {
-    working_surface:^sdl2.Surface ,
-    font_surface_array:[96]^sdl2.Surface,
-    view_background_surfaces:[VIEW_ENUM]^sdl2.Surface,
-    quill_array:[LENGTH_OF_QUILL_ARRAY]^sdl2.Surface,
-    // Better solution needed, to get rid of dead data? Irrelevant for now?
-    item_in_view_surfaces:[PLAYER_ITEM][VIEW_ENUM]^sdl2.Surface, // should be dynamic array of {VIEW_ENUM, PLAYER_ITEM, STATE_INT}
-    item_points_view_location:[PLAYER_ITEM][VIEW_ENUM]Point_i32,
-    npc_portraits:[NPC_ENUM]^sdl2.Surface,
-    npc_standing:[NPC_ENUM]^sdl2.Surface,
-    font_rect: sdl2.Rect,
-};
-
-GameSettings :: struct {
-    window_size:int, // default = 1
-    quit:bool, // default = false
-};
-
-SceneryItemData :: struct {
-	sceneryItemNames:[VIEW_ENUM][dynamic]string,
-	enum_state:[VIEW_ENUM][dynamic]int,
-	descriptions:[VIEW_ENUM][dynamic][]string,
-}
-
-ViewData :: struct {
-    current_view_idx: VIEW_ENUM, 
-    npc_in_room:[VIEW_ENUM]Maybe(NPC_ENUM),
-    npc_description:[NPC_ENUM]string,
-    scenery_items:SceneryItemData, //thonk
-    events:[VIEW_ENUM]EventData,
-    view_type:[VIEW_ENUM]ViewType,
-    adjascent_views:[VIEW_ENUM]bit_set[VIEW_ENUM], // adjascent_views[view_to_query][is_this_adjascent]
-    adjascent_views_num:[VIEW_ENUM]int, // This and the above could be refactored as dynamic array
-};
-
-DialogueNode :: struct {
-    selection_option:string,// 
-    dialogue_text:string,
-    parent_node:^DialogueNode,
-    child_nodes:[dynamic]^DialogueNode,
-};
-
-Text_RenderState :: struct {
-    current_txt_anim: proc (int, ^GlobalSurfaces, string) -> int,
-    duration_count:int,
-    string_to_blit:string, // Is this needed with future allocator stuff?
-};
-
-Inventory_RenderState :: struct{
-    left_column_selected: bool,
-    row_selected:int,
-};
-
-Menu_RenderState :: struct {
-    res_option_index,  prev_res_option_index, selected_option_index :int,
-};
-
-
-NPC_RenderState :: struct {
-    current_npc:NPC_ENUM,
-    current_node:^DialogueNode,
-    selected_dialogue_option, number_of_options:int,
-};
-
-GlobalRenderStates :: struct {
-     txt: Text_RenderState,
-     inv:Inventory_RenderState,
-     menu:Menu_RenderState,
-     npc:NPC_RenderState,
-};
-Synonyms :: struct {
-	synonym:[dynamic]string, //use this to find index for below
-	scenery_item:[dynamic][]Synonym_SceneryItem, // slice of room enums, and slice of scenery item names
-	player_item:[dynamic][]PLAYER_ITEM,
-}
-
-GlobalEverything :: struct {
-    settings:GameSettings,
-    surfs:GlobalSurfaces,
-    view_data:ViewData,
-    game_mode:GameMode,
-    palettes:[PALETTE][4]u32,
-    room_palettes:[VIEW_ENUM]^[4]u32,
-    dialogue_data:DialogueData,
-    item_state:Item_State,
-    render_states:GlobalRenderStates,
-    synonyms:Synonyms,
-    save_data:SaveData,
-};
-
-render_dialogue :: proc (using ge:^GlobalEverything){
+render_dialogue :: proc (using ge:^init.GlobalEverything){
     using render_states.npc, surfs
     portrait:= npc_portraits[current_npc]; 
     sdl2.BlitSurface(portrait, nil, working_surface, &portrait.clip_rect);
@@ -153,7 +20,7 @@ render_dialogue :: proc (using ge:^GlobalEverything){
     if number_of_options <= 1 do return;
     for i in 0..<number_of_options {
         YPosition := (NATIVE_HEIGHT) - (font_rect.h * i32(number_of_options - (i*2) + 8 ));
-        tile_to_blit := font_surface_array[char_to_index(cast(u8)' ')]
+        tile_to_blit := font_surface_array[init.char_to_index(cast(u8)' ')]
         blit_tile(tile_to_blit,LENGTH_OF_CHAR_BUFFER_ARRAY + 4, working_surface, YPosition, font_rect.w * 18);
         blit_tile(tile_to_blit,LENGTH_OF_CHAR_BUFFER_ARRAY + 4, working_surface, YPosition - font_rect.h, font_rect.w * 18);
         blit_text(&surfs, current_node.child_nodes[i].selection_option, YPosition, font_rect.w * 20);
@@ -164,11 +31,11 @@ render_dialogue :: proc (using ge:^GlobalEverything){
     blit_text(&surfs, "+", plus_y_pos, plus_x_pos);
 };
 
-render_menu :: proc (using ge:^GlobalEverything, ){
+render_menu :: proc (using ge:^init.GlobalEverything, ){
     using ge.render_states
     context.allocator = context.temp_allocator
     for Y in 0..<10 {
-        blit_tile(surfs.font_surface_array[char_to_index(u8(' '))],24,surfs.working_surface, surfs.font_rect.h* i32(Y), 0);
+        blit_tile(surfs.font_surface_array[init.char_to_index(u8(' '))],24,surfs.working_surface, surfs.font_rect.h* i32(Y), 0);
     };
     res_option_str:[5]string = {"1", "2", "3", "4", "5"};
     resolutionMessage:string = strings.concatenate({"  WINDOW SCALE x", res_option_str[menu.res_option_index]})
@@ -181,7 +48,7 @@ render_menu :: proc (using ge:^GlobalEverything, ){
         surfs.font_rect.w);
 };
 
-inventory_get_nth_item :: proc (using inv:^PlayerInventory, position_in_list:int) -> (PLAYER_ITEM, bool){
+inventory_get_nth_item :: proc (using inv:^init.PlayerInventory, position_in_list:int) -> (init.PLAYER_ITEM, bool){
     if inv.origin_index == -1 do return nil, false
     current_item := inv.inv_item[inv.origin_index];
     for  i in  0..<inv.number_of_items_held {
@@ -192,29 +59,29 @@ inventory_get_nth_item :: proc (using inv:^PlayerInventory, position_in_list:int
     return nil, false
 };
 
-render_inventory :: proc (using ge:^GlobalEverything, ){
+render_inventory :: proc (using ge:^init.GlobalEverything, ){
     for Y in 0..<8 {
-        blit_tile(surfs.font_surface_array[char_to_index(u8(' '))],36,surfs.working_surface, surfs.font_rect.h* i32(Y), 0);
+        blit_tile(surfs.font_surface_array[init.char_to_index(u8(' '))],36,surfs.working_surface, surfs.font_rect.h* i32(Y), 0);
     };
     using ge.item_state
     if (player_inv.number_of_items_held > 0){
-        for i in 0..< MAX_ITEMS_IN_INVENTORY / 2 {
+        for i in 0..< init.MAX_ITEMS_IN_INVENTORY / 2 {
             if(player_inv.occupied[i] == true){
                 item_name: = reflect.enum_string(player_inv.inv_item[i].item_enum);
                 blit_text(&surfs, item_name, surfs.font_rect.h * i32(i), surfs.font_rect.w * 3);
             };
-            if(player_inv.occupied[i+(MAX_ITEMS_IN_INVENTORY / 2)] == true){
-                item_name := reflect.enum_string(player_inv.inv_item[i + (MAX_ITEMS_IN_INVENTORY / 2)].item_enum);
+            if(player_inv.occupied[i+(init.MAX_ITEMS_IN_INVENTORY / 2)] == true){
+                item_name := reflect.enum_string(player_inv.inv_item[i + (init.MAX_ITEMS_IN_INVENTORY / 2)].item_enum);
                 blit_text(&surfs, item_name, surfs.font_rect.h * i32(i), surfs.font_rect.w * 20);
             };
         };
     };
 
-    selected_item_in_inventory_index := #force_inline proc(using render_states:^GlobalRenderStates) -> int {
+    selected_item_in_inventory_index := #force_inline proc(using render_states:^init.GlobalRenderStates) -> int {
         switch{
-            case inv.row_selected == (MAX_ITEMS_IN_INVENTORY / 2): return -1
+            case inv.row_selected == (init.MAX_ITEMS_IN_INVENTORY / 2): return -1
             case inv.left_column_selected: return inv.row_selected
-            case: return inv.row_selected + (MAX_ITEMS_IN_INVENTORY / 2)
+            case: return inv.row_selected + (init.MAX_ITEMS_IN_INVENTORY / 2)
         }
     }(&ge.render_states)
 
@@ -225,7 +92,7 @@ render_inventory :: proc (using ge:^GlobalEverything, ){
         blit_general_string(1, &surfs, inventory_data.descriptions[selected_item_enum][current_desc_idx])
     }
     
-    blit_text(&surfs, "  EXIT INVENTORY", surfs.font_rect.h * (MAX_ITEMS_IN_INVENTORY / 2), 0);
+    blit_text(&surfs, "  EXIT INVENTORY", surfs.font_rect.h * (init.MAX_ITEMS_IN_INVENTORY / 2), 0);
     using ge.render_states
     plus_x_pos :i32 = surfs.font_rect.h * i32(inv.row_selected) ;
     plus_y_pos :i32 = inv.left_column_selected ? surfs.font_rect.w : surfs.font_rect.w * 17; 
@@ -233,10 +100,10 @@ render_inventory :: proc (using ge:^GlobalEverything, ){
 };
 
 
-render_default := proc (using ge:^GlobalEverything, text_buffer:^InputTextBuffer) {
+render_default := proc (using ge:^init.GlobalEverything, text_buffer:^InputTextBuffer) {
     using surfs
     if view_data.npc_in_room[view_data.current_view_idx] != nil { // Blit NPC
-        npc_surface := npc_standing[view_data.npc_in_room[view_data.current_view_idx].(NPC_ENUM)];
+        npc_surface := npc_standing[view_data.npc_in_room[view_data.current_view_idx].(init.NPC_ENUM)];
         sdl2.BlitSurface(npc_surface, nil, working_surface, &npc_surface.clip_rect);
     }
     using render_states.txt
@@ -247,10 +114,10 @@ render_default := proc (using ge:^GlobalEverything, text_buffer:^InputTextBuffer
     if text_buffer.elems_in_charBuffer == 0 do return
 
     using text_buffer
-    blit_tile(font_surface_array[char_to_index(u8(' '))],len(charBuffer) + 4, working_surface, (font_rect.h * -1) + NATIVE_HEIGHT, 0);
+    blit_tile(font_surface_array[init.char_to_index(u8(' '))],len(charBuffer) + 4, working_surface, (font_rect.h * -1) + NATIVE_HEIGHT, 0);
     blit_text(&surfs, string(charBuffer[:]), (font_rect.h * -1) + NATIVE_HEIGHT, 0);
 
-    animate_quill :: proc (using gs:^GlobalSurfaces, elems_in_charBuffer:int){
+    animate_quill :: proc (using gs:^init.GlobalSurfaces, elems_in_charBuffer:int){
         @static animation_frame := 0;
         @static counter := 0;
         counter += 1
@@ -269,234 +136,9 @@ render_default := proc (using ge:^GlobalEverything, text_buffer:^InputTextBuffer
 
 import "core:intrinsics"
 
-sliced :: proc(es: ^$A) -> [] intrinsics.type_elem_type(A) {
-    T :: intrinsics.type_elem_type(A)
-    return ([^]T)(es)[:len(es)]
-}
-
-StumpState :: enum {
-    AxewiseStuck,
-    Normal,
-}
-
-init_scenery_items :: proc (using view_data:^ViewData){
-
-    for view in VIEW_ENUM {
-		scenery_items.sceneryItemNames[view] = make([dynamic]string)
-		scenery_items.enum_state[view] = make([dynamic]int)
-		scenery_items.descriptions[view] = make([dynamic][]string)
-	}
-
-    add_scenery_item :: proc(using data:^SceneryItemData, view:VIEW_ENUM, name:string, _descriptions:..string){
-        append(&sceneryItemNames[view], name)
-        append(&enum_state[view], 0)
-        append(&descriptions[view], slice.clone(_descriptions[:]))
-    }
-
-    add_scenery_item(&scenery_items, .CHURCH, "CHURCH", "Dedicated to Saint Lazarus, this modest Church stands strong.");
-    add_scenery_item(&scenery_items, .CHURCH, "SHRINE", "The shrine stands tall on the hill, proud of its older brother.");
-    add_scenery_item(&scenery_items, .CHURCH, "TREE", "It is a bare tree, standing alone.");
-    add_scenery_item(&scenery_items, .CHURCH, "GATE", "Crudely drawn, and unfinished.");
-
-    add_scenery_item(&scenery_items, .CLEARING, "CLEARING", "A quiet clearing. A good place to find lazy trees.");
-    add_scenery_item(&scenery_items, .CLEARING, "TREES", "Loitering in the clearing, the trees don't have much to do." );
-
-    stump_descriptions:[StumpState]string = {
-		.Normal = "Stump left behind from an old tree. Memories of childhood return.",
-		.AxewiseStuck = "The stump is axewise stuck.",
-	}
-
-    add_scenery_item(&scenery_items, .CLEARING, "STUMP", ..sliced(&stump_descriptions));
-
-    add_scenery_item(&scenery_items, .SHRINE, "SHRINE", "Almost like a miniature church, the shrine keeps travellers hopes in a travel-sized temple.");
-    add_scenery_item(&scenery_items, .SHRINE, "CANDLE", "A sleeping soldier of metal and oil waits for its next call to duty.");
-
-    add_scenery_item(&scenery_items, .SKETE, "SKETE", "It is a sturdy, cozy skete.")
-
-    for view in VIEW_ENUM {
-        shrink(&scenery_items.descriptions[view])
-        shrink(&scenery_items.enum_state[view])
-        shrink(&scenery_items.sceneryItemNames[view])
-    }
-};
-
-init_npc_descriptions :: proc (vd:^ViewData){  
-    vd.npc_description[.ALEXEI] = "Alexei is stern, yet lively. His arms yearn to throw fools into deep, dark pits."
-};
-
-init_surfaces :: proc (using surfs:^GlobalSurfaces) {
-    context.allocator = context.temp_allocator
-    for x, idx in view_background_surfaces {
-        temp_dir := fmt.aprintf("assets/%s.bmp", reflect.enum_string(idx));
-        view_background_surfaces[idx] = sdl2.LoadBMP(strings.clone_to_cstring(temp_dir));
-    };
-    for i in 0..=25 {
-        temp_dir := fmt.aprintf("assets/font/cap_%c.bmp", 'A' + i);
-        font_surface_array[char_to_index('A' + i)] = sdl2.LoadBMP(strings.clone_to_cstring(temp_dir));
-    };
-    for i in 0..=25 {
-        temp_dir := fmt.aprintf("assets/font/low_%c.bmp", 'a' + i);
-        font_surface_array[char_to_index('a' + i)] = sdl2.LoadBMP(strings.clone_to_cstring(temp_dir));
-    };
-    for i in 0..<10 {
-        temp_dir := fmt.aprintf("assets/font/%c.bmp", '0' + i);
-        font_surface_array[char_to_index('0' + i)] = sdl2.LoadBMP(strings.clone_to_cstring(temp_dir));
-    };
-    font_surface_array[char_to_index(cast(u8)' ')] = sdl2.LoadBMP(strings.clone_to_cstring("assets/font/space.bmp"));
-    font_surface_array[char_to_index(cast(u8)'+')] = sdl2.LoadBMP(strings.clone_to_cstring("assets/font/+.bmp"));
-    font_surface_array[char_to_index(cast(u8)'?')] = sdl2.LoadBMP(strings.clone_to_cstring("assets/font/question_mark.bmp"));
-    font_surface_array[char_to_index(cast(u8)'!')] = sdl2.LoadBMP(strings.clone_to_cstring("assets/font/exclamation_mark.bmp"));
-    font_surface_array[char_to_index(cast(u8)',')] = sdl2.LoadBMP(strings.clone_to_cstring("assets/font/comma.bmp"));
-    font_surface_array[char_to_index(cast(u8)'.')] = sdl2.LoadBMP(strings.clone_to_cstring("assets/font/period.bmp"));
-    font_surface_array[char_to_index(cast(u8)'\'')] = sdl2.LoadBMP(strings.clone_to_cstring("assets/font/apostrophe.bmp"));
-    font_surface_array[char_to_index(cast(u8)'"')] = sdl2.LoadBMP(strings.clone_to_cstring("assets/font/quotation_double.bmp"));
-    for x, idx in &quill_array {
-        temp_dir := fmt.aprintf("assets/quill/quill_%c.bmp", '1' + idx);
-        x = sdl2.LoadBMP(strings.clone_to_cstring(temp_dir));
-    };
-    for x, item_idx in item_in_view_surfaces {
-        for _x, view_idx in x {
-            temp_dir := fmt.aprintf( "assets/%s_item_%s.bmp", reflect.enum_string(view_idx), reflect.enum_string(item_idx));
-            item_in_view_surfaces[item_idx][view_idx] = sdl2.LoadBMP(strings.clone_to_cstring(temp_dir));
-            if item_in_view_surfaces[item_idx][view_idx] == nil do continue
-            switch(reflect.enum_string(item_idx)){
-                case "AXE":
-                    item_in_view_surfaces[item_idx][view_idx].clip_rect.x = 242;
-                    item_in_view_surfaces[item_idx][view_idx].clip_rect.y = 113;
-                case "LAZARUS_ICON":
-                    item_in_view_surfaces[item_idx][view_idx].clip_rect.x = 117;
-                    item_in_view_surfaces[item_idx][view_idx].clip_rect.y = 63;
-            }
-        };
-    };
-    default_npc_portrait_point :: proc (npc:NPC_ENUM) -> Point_i32{
-        switch (npc){
-            case .ALEXEI: return {32,20};
-            case: return {0,0};
-        };
-    };
-    
-    default_npc_standing_point :: proc (npc:NPC_ENUM) -> Point_i32{
-        switch (npc){
-            case .ALEXEI: return {89,58};
-            case: return {0,0};
-        };
-    };
-    for x, idx in &npc_portraits {
-        temp_dir := fmt.aprintf("assets/%s_PORTRAIT.bmp", reflect.enum_string(idx));
-        npc_portraits[idx] = sdl2.LoadBMP(strings.clone_to_cstring(temp_dir))
-        if(npc_portraits[idx] != nil){
-            point := default_npc_portrait_point(idx);
-            npc_portraits[idx].clip_rect.x = point.x;
-            npc_portraits[idx].clip_rect.y = point.y;
-        };
-        temp_dir = fmt.aprintf("assets/%s_STANDING.bmp", reflect.enum_string(idx));
-        npc_standing[idx] = sdl2.LoadBMP(strings.clone_to_cstring(temp_dir))
-        if(npc_standing[idx] != nil){
-            point := default_npc_standing_point(idx);
-            npc_standing[idx].clip_rect.x = point.x;
-            npc_standing[idx].clip_rect.y = point.y;
-        };
-    };
-    font_rect = font_surface_array[0].clip_rect
-}
 
 
-global_buffer: [4*mem.Kilobyte]byte
-global_arena: mem.Arena
-
-Synonym_SceneryItem :: struct {
-	name:string,
-	view:VIEW_ENUM,
-}
-add_synonym :: proc(data:^Synonyms, synonym:string, synonym_for:..union{PLAYER_ITEM,Synonym_SceneryItem}){
-    pItem_dynArray:[dynamic]PLAYER_ITEM; 
-    for x in synonym_for {
-        #partial switch v in x {
-            case PLAYER_ITEM: append(&pItem_dynArray, v);
-        }
-    }
-    shrink(&pItem_dynArray)
-
-    sItem_dynArray: [dynamic]Synonym_SceneryItem;
-    for x in synonym_for {
-        #partial switch v in x {
-            case Synonym_SceneryItem: append(&sItem_dynArray, v);
-        }
-    }
-    shrink(&sItem_dynArray)
-
-    append(&data.synonym, synonym)
-    append(&data.player_item, pItem_dynArray[:])
-    append(&data.scenery_item, sItem_dynArray[:])
-}
-
-init_everything :: proc (using ge:^GlobalEverything) {
-    
-    palettes = {
-        .Church = [4]u32{0xCBF1F5, 0x445975, 0x0E0F21, 0x050314},
-        .Clearing = [4]u32{0xEBE08D, 0x8A7236, 0x3D2D17, 0x1A1006},
-        .Skete = [4]u32{0x8EE8AF, 0x456E44, 0x1D2B19, 0x0B1706},
-    }
-
-    room_palettes = {
-        .CHURCH = &ge.palettes[.Church], 
-        .CLEARING = &ge.palettes[.Clearing], 
-        .SKETE = &ge.palettes[.Skete], 
-        .CHAPEL = &ge.palettes[.Skete], 
-        .SHRINE = &ge.palettes[.Church], 
-    };
-	settings.quit = false
-	settings.window_size = 1
-
-	view_data.current_view_idx = .CHURCH
-
-    view_data.adjascent_views_num[.SHRINE] = 1;
-    view_data.adjascent_views[.SHRINE] = {.CHURCH}
-
-    view_data.adjascent_views_num[.CHURCH] = 2;
-    view_data.adjascent_views[.CHURCH] = {.CLEARING, .SHRINE}
-
-    view_data.adjascent_views_num[.CLEARING] = 2;
-    view_data.adjascent_views[.CLEARING] = {.CHURCH, .SKETE}
-
-    view_data.adjascent_views_num[.SKETE] = 2;
-    view_data.adjascent_views[.SKETE] = {.CLEARING, .CHAPEL}
-
-    view_data.adjascent_views_num[.CHAPEL] = 1;
-    view_data.adjascent_views[.CHAPEL] = {.SKETE}
-
-    for x in &view_data.npc_in_room { x = nil }
-    view_data.npc_in_room[.SKETE] = .ALEXEI
-
-    for x in &view_data.view_type { x = .Room }
-    view_data.view_type[.SHRINE] = .LookInside
-
-    view_data.view_type = {
-        .CHAPEL = .Room,
-        .CHURCH = .Room,
-        .SHRINE = .LookInside,
-        .CLEARING = .Room,
-        .SKETE = .Room,
-    }
-    init_synonyms :: proc(data:^Synonyms) {
-        data.synonym = make([dynamic]string)
-        data.scenery_item = make([dynamic][]Synonym_SceneryItem)
-    }
-
-    init_synonyms(&ge.synonyms)
-    init_scenery_items(&view_data);
-    init_npc_descriptions(&view_data);
-    init_surfaces(&surfs)
-
-    // Done
-	game_mode = ._Default
-
-    init_player_item_data(&item_state, &ge.view_data, ge);
-    render_states.inv.left_column_selected = true
-}
-
-parse_token :: proc(str:string) -> ValidCommand {
+parse_token :: proc(str:string) -> init.ValidCommand {
 	switch str {
 		case "QUIT": return .Quit
 		case "MENU": return .Menu
@@ -523,106 +165,15 @@ InputTextBuffer :: struct {
 import "core:mem"
 import "core:reflect"
 
-char_to_index :: proc (_input:union{u8, int}) -> int{
-
-	input :int
-	switch v in _input {
-		case int: input = _input.(int)
-		case u8: input = int(_input.(u8))
-	}
-	switch {
-		case input >= 'A' && input <= 'Z': return input - 'A'
-		case input >= '0' && input <= '9': return 26 + input - '0'
-		case input >= 'a' && input <= 'z': return 36 + input - 'a'
-	}
-    switch(input){
-        case ' ':return 62;
-        case '+': return 63;
-        case '?': return 64;
-        case '!': return 65;
-        case ',': return 66;
-        case '.': return 67;
-        case '\'': return 68;
-        case '"': return 69;
-        case: return -1;
-    };
-};
-
-NPC_ENUM :: enum {
-    ALEXEI,
-}
-
-DialogueData :: struct {
-    starter_nodes:[NPC_ENUM]^DialogueNode,
-};
-
-PLAYER_ITEM :: enum {
-    AXE,
-    LAZARUS_ICON,
-    CHRIST_ICON,
-    MARY_ICON,
-    JBAPTIST_ICON,
-}
-
-InventoryItem_ListElem :: struct {
-    item_enum:PLAYER_ITEM,
-    next_item_index:i8, // -1 = tail
-};
-
-MAX_ITEMS_IN_INVENTORY :: 12
-
-PlayerInventory :: struct {
-    inv_item:[MAX_ITEMS_IN_INVENTORY]InventoryItem_ListElem,
-    occupied:[MAX_ITEMS_IN_INVENTORY]bool,
-    tail_index:i8,
-    origin_index:i8,
-    number_of_items_held:int,
-};
-
-PlayerItemData_InView :: struct {
-	enum_state:[PLAYER_ITEM]int,
-	descriptions:[PLAYER_ITEM][]string,
-	view_location:[PLAYER_ITEM]Maybe(VIEW_ENUM),
-    is_takeable_item:bit_set[PLAYER_ITEM], 
-}
-
-PlayerItemData_InInventory :: struct {
-	enum_state:[PLAYER_ITEM]int,
-	descriptions:[PLAYER_ITEM][]string,
-	index_in_inventory:[PLAYER_ITEM]i8,
-}
-
-PlayerItemData :: struct {
-    inventory_data:PlayerItemData_InInventory,
-    in_view_data:PlayerItemData_InView,
-};
-
-PlaceEvent :: struct {
-    scenery_dest_index:int,
-    event:proc (^GlobalEverything),
-};
-
-
-EventData :: struct {
-    //These will very likely need to be made multi-dimensional.
-    take_events:[PLAYER_ITEM]proc (^GlobalEverything),
-    place_events:[PLAYER_ITEM]PlaceEvent,
-};
-
-Item_State :: struct {
-    player_inv:PlayerInventory,
-    player_items:PlayerItemData,
-    events:EventData,
-};
-check_synonyms :: proc (search:string, room:VIEW_ENUM, data:^Synonyms) -> (union{[]string,[]PLAYER_ITEM}, bool) {
+check_synonyms :: proc (search:string, room:init.VIEW_ENUM, data:^init.Synonyms) -> (union{[]string,[]init.PLAYER_ITEM}, bool) {
 	//Problem: Pre-sort by room? Grabble the data by room temproarily?
 	context.allocator = context.temp_allocator
 	for syn, idx in data.synonym {
 		if syn != search do continue;
 		switch {
 			case len(data.player_item[idx]) + len(data.scenery_item[idx]) > 1:
-				playeritemstrmap := slice.mapper(data.player_item[idx], cast(proc(PLAYER_ITEM) -> string)reflect.enum_string)
-				scenery_items_strs := slice.mapper(data.scenery_item[idx], proc(i:Synonym_SceneryItem) -> string {return i.name})
+				playeritemstrmap := slice.mapper(data.player_item[idx], cast(proc(init.PLAYER_ITEM) -> string)reflect.enum_string)
+				scenery_items_strs := slice.mapper(data.scenery_item[idx], proc(i:init.Synonym_SceneryItem) -> string {return i.name})
 				options := slice.concatenate([][]string{playeritemstrmap, scenery_items_strs})
 				return options, true
 			case len(data.player_item[idx]) == 1:  return data.player_item[idx], true
@@ -633,40 +184,25 @@ check_synonyms :: proc (search:string, room:VIEW_ENUM, data:^Synonyms) -> (union
 	return []string{}, false
 }
 
-check_item_synonyms :: proc (str:string, ge:^GlobalEverything) -> (PLAYER_ITEM, bool) {
+check_item_synonyms :: proc (str:string, ge:^init.GlobalEverything) -> (init.PLAYER_ITEM, bool) {
     honk, ok := check_synonyms(str, ge.view_data.current_view_idx, &ge.synonyms)
     switch v in honk {
-        case []PLAYER_ITEM:
+        case []init.PLAYER_ITEM:
             if len(v) == 1 do return v[0], true
         case []string:  assert(false, "uh-oh, string got back from check item synonyms")
     }
     return nil, false
 };
 
-item_name_to_index :: proc (str:string, ge:^GlobalEverything) -> (item_enum:PLAYER_ITEM, ok:bool) {
-    item_enum, ok = reflect.enum_from_name(PLAYER_ITEM, str)
+item_name_to_index :: proc (str:string, ge:^init.GlobalEverything) -> (item_enum:init.PLAYER_ITEM, ok:bool) {
+    item_enum, ok = reflect.enum_from_name(init.PLAYER_ITEM, str)
     if(ok){
         return item_enum, ok
     }
     return check_item_synonyms(str, ge)
 };
 
-scenery_item_name_to_index :: proc (name:string, ge:^GlobalEverything, view_idx:VIEW_ENUM) -> (idx:int, ok:bool){
-    using ge.view_data
-    for str, idx in scenery_items.sceneryItemNames[view_idx] {
-        if name == str do return idx, true
-    };
-    fmt.printf("Failed get on %s \n", name)
-    return -1, false
-};
-
-init_save_data_struct :: proc (save_data:^SaveData, ge:^GlobalEverything) {
-    for savedata_arr, view_enum in &save_data.view_data.scenery_items.enum_state {
-        savedata_arr = make([dynamic]int, len(ge.view_data.scenery_items.enum_state[view_enum]), cap(ge.view_data.scenery_items.enum_state[view_enum]))
-    }
-}
-
-handle_savedata_struct :: proc (mode:SAVEGAME_IO, save_data:^SaveData, ge:^GlobalEverything, ) {
+handle_savedata_struct :: proc (mode:SAVEGAME_IO, save_data:^init.SaveData, ge:^init.GlobalEverything, ) {
     reverse_memcopy :: proc "contextless" (dst, src: rawptr, len: int) -> rawptr {
         return mem.copy(src, dst, len)
     }
@@ -677,15 +213,14 @@ handle_savedata_struct :: proc (mode:SAVEGAME_IO, save_data:^SaveData, ge:^Globa
     order_func(&save_data.view_data.current_view_idx, &ge.view_data.current_view_idx, 1)
     order_func(&save_data.view_data.npc_in_room, &ge.view_data.npc_in_room, 1)
 
-    for _ecase in VIEW_ENUM {
+    for _ecase in init.VIEW_ENUM {
         for _int, idx in &save_data.view_data.scenery_items.enum_state[_ecase] {
             order_func(&_int, &ge.view_data.scenery_items.enum_state[_ecase][idx], 1)
         }
     }
     order_func(&save_data.view_data.adjascent_views, &ge.view_data.adjascent_views, 1)
-    order_func(&save_data.view_data.adjascent_views_num, &ge.view_data.adjascent_views_num, 1)
 
-    for idx in 0..<MAX_ITEMS_IN_INVENTORY {
+    for idx in 0..<init.MAX_ITEMS_IN_INVENTORY {
         order_func(&save_data.player_inventory.inv_item[idx], &ge.item_state.player_inv.inv_item[idx], 1)
         order_func(&save_data.player_inventory.occupied[idx], &ge.item_state.player_inv.occupied[idx], 1)
     }
@@ -693,7 +228,7 @@ handle_savedata_struct :: proc (mode:SAVEGAME_IO, save_data:^SaveData, ge:^Globa
     order_func(&save_data.player_inventory.origin_index, &ge.item_state.player_inv.origin_index, 1)
     order_func(&save_data.player_inventory.tail_index, &ge.item_state.player_inv.tail_index, 1)
     
-    for idx in PLAYER_ITEM {
+    for idx in init.PLAYER_ITEM {
         order_func(&save_data.item_data.in_view_data.enum_state[idx], &ge.item_state.player_items.in_view_data.enum_state[idx], 1)
         order_func(&save_data.item_data.in_view_data.view_location[idx], &ge.item_state.player_items.in_view_data.view_location[idx], 1)
         order_func(&save_data.item_data.inventory_data.index_in_inventory[idx], &ge.item_state.player_items.inventory_data.index_in_inventory[idx], 1)
@@ -703,70 +238,51 @@ handle_savedata_struct :: proc (mode:SAVEGAME_IO, save_data:^SaveData, ge:^Globa
     
 }
 
-SaveData :: struct {
-    res_index:int,
-    view_data: struct {
-        current_view_idx:VIEW_ENUM,
-        npc_in_room:[VIEW_ENUM]Maybe(NPC_ENUM),
-        scenery_items: struct {
-            enum_state:[VIEW_ENUM][dynamic]int,
-        },
-        adjascent_views:[VIEW_ENUM]bit_set[VIEW_ENUM],
-        adjascent_views_num:[VIEW_ENUM]int, // Can this be derived from the number of 1s in the above?
-    },
-    item_data: struct {
-        current_description:[PLAYER_ITEM]int,
-        is_item_taken:bit_set[PLAYER_ITEM],
-        in_view_data: struct {
-            enum_state: [PLAYER_ITEM]int,
-            view_location:[PLAYER_ITEM]Maybe(VIEW_ENUM),
-            is_takeable_item:bit_set[PLAYER_ITEM], 
-        },
-        inventory_data : struct {
-            index_in_inventory:[PLAYER_ITEM]int,
-        },
-    },
-    player_inventory: PlayerInventory,
-
-}
-
 SAVEGAME_IO :: enum {
     READ,
     WRITE,
 };
 
-handle_savedata_io :: proc (mode:SAVEGAME_IO, save_data:^SaveData){ // For file io
+handle_savedata_io :: proc (mode:SAVEGAME_IO, save_data:^init.SaveData){ // For file io
 
     io_func := mode == .WRITE ? os.write : os.read
 
     saveFileHandle, err := os.open("save.dat", mode == .WRITE ? os.O_WRONLY : os.O_RDONLY);
-    items_handled := 0;
-    errno:os.Errno
 
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.res_index));
-    
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.inventory_data.index_in_inventory));
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.is_item_taken));
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.in_view_data.is_takeable_item));
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.current_description));
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.in_view_data.enum_state));
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.in_view_data.view_location));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.res_index));
+
+    fmt.printf("Item data: %#v\n", save_data.item_data)
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.inventory_data.index_in_inventory));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.is_item_taken));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.in_view_data.is_takeable_item));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.current_description));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.in_view_data.enum_state));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.item_data.in_view_data.view_location));
 
     //Inventory Data
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.player_inventory.inv_item));
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.player_inventory.number_of_items_held));
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.player_inventory.occupied));
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.player_inventory.origin_index));
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.player_inventory.tail_index));
+
+    //TODO: Revisit this when ols fixed
+    // player_inv_fields := reflect.struct_fields_zipped(init.PlayerInventory) 
+    // for field in player_inv_fields {
+    //     honk := mem.ptr_offset(&save_data.player_inventory, field.offset)
+    //     gronk := field.type.
+    //     io_func(saveFileHandle, mem.ptr_to_bytes(cast(^gronk)honk))
+    //     // io_func(saveFileHandle, mem.any_to_bytes(field.))
+    // }
+    fmt.printf("Player inventory: %#v\n", save_data.player_inventory)
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.player_inventory.inv_item));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.player_inventory.number_of_items_held));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.player_inventory.occupied));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.player_inventory.origin_index));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.player_inventory.tail_index));
 
     //Room Data
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.view_data.current_view_idx));
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.view_data.npc_in_room));
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.view_data.adjascent_views));
-    items_handled, errno = io_func(saveFileHandle, mem.any_to_bytes(save_data.view_data.adjascent_views_num));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.view_data.current_view_idx));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.view_data.npc_in_room));
+    io_func(saveFileHandle, mem.any_to_bytes(save_data.view_data.adjascent_views));
 
-    for saved_enum_state, idx in &save_data.view_data.scenery_items.enum_state {
-        items_handled, errno = io_func(saveFileHandle,slice.to_bytes(saved_enum_state[:]));
+    for saved_enum_state in &save_data.view_data.scenery_items.enum_state {
+        io_func(saveFileHandle,slice.to_bytes(saved_enum_state[:]));
     }
 
     os.close(saveFileHandle);
@@ -778,7 +294,7 @@ RedOf :: #force_inline proc (hexRGB888:u32) -> u8 {return u8(hexRGB888 >> 16) & 
 GreenOf :: #force_inline proc (hexRGB888:u32) -> u8 {return u8(hexRGB888 >> 8) & 255}
 BlueOf :: #force_inline proc (hexRGB888:u32) -> u8 {return u8(hexRGB888 & 255)}
 
-replace_all_palettes :: proc (using ge:^GlobalEverything, new_room_pal_index:VIEW_ENUM){
+replace_all_palettes :: proc (using ge:^init.GlobalEverything, new_room_pal_index:init.VIEW_ENUM){
     replace_palette :: proc (target:^sdl2.Surface, current_palette:^[4]u32, new_palette:^[4]u32){
         // uint32_t* pixel_ptr = (uint32_t*)target.pixels;
         pixel_ptr := cast(^u32)target.pixels
@@ -797,7 +313,7 @@ replace_all_palettes :: proc (using ge:^GlobalEverything, new_room_pal_index:VIE
         };
     };
 
-    for pal_index in VIEW_ENUM {
+    for pal_index in init.VIEW_ENUM {
         for char_sprite in &surfs.font_surface_array {
             if char_sprite != nil do replace_palette(char_sprite, room_palettes[pal_index], room_palettes[new_room_pal_index]);
         };
@@ -811,12 +327,12 @@ replace_all_palettes :: proc (using ge:^GlobalEverything, new_room_pal_index:VIE
     };
 };
 
-handle_default_mode_event :: proc (event:^sdl2.Event, using ge:^GlobalEverything, t:^InputTextBuffer, ){
+handle_default_mode_event :: proc (event:^sdl2.Event, using ge:^init.GlobalEverything, t:^InputTextBuffer, ){
     #partial switch event.type {
         case .TEXTINPUT:
             if t.elems_in_charBuffer == len(t.charBuffer) - 1 do return;
             char_to_parse := event.text.text[0];
-            if char_to_index(char_to_parse) == -1 do return
+            if init.char_to_index(char_to_parse) == -1 do return
             char_to_put := char_to_parse;
             t.charBuffer[t.elems_in_charBuffer] = char_to_put; 
             t.elems_in_charBuffer += 1;
@@ -839,13 +355,13 @@ handle_default_mode_event :: proc (event:^sdl2.Event, using ge:^GlobalEverything
     }
 };
 
-addTxtAnim :: proc (arr:^Text_RenderState, anim: proc (int, ^GlobalSurfaces, string) -> int, blit_data:Maybe(string)){
+addTxtAnim :: proc (arr:^init.Text_RenderState, anim: proc (int, ^init.GlobalSurfaces, string) -> int, blit_data:Maybe(string)){
     arr.current_txt_anim = anim;
     arr.duration_count = 240;
     if blit_data != nil do arr.string_to_blit = blit_data.(string)
 };
 
-blit_text :: proc (using gs:^GlobalSurfaces, string_to_blit:string, YPosition:i32, XPosition:i32){
+blit_text :: proc (using gs:^init.GlobalSurfaces, string_to_blit:string, YPosition:i32, XPosition:i32){
     space_rect:sdl2.Rect ={
         h = font_rect.h,
         w = font_rect.w,
@@ -854,20 +370,20 @@ blit_text :: proc (using gs:^GlobalSurfaces, string_to_blit:string, YPosition:i3
 
     for i in 0..<len(string_to_blit){
         space_rect.x = i32(i) * 9 + XPosition;
-        char_to_blit_idx := char_to_index(string_to_blit[i])
+        char_to_blit_idx := init.char_to_index(string_to_blit[i])
         if char_to_blit_idx == -1 do continue
         sdl2.BlitSurface(font_surface_array[char_to_blit_idx], nil, working_surface, &space_rect);
     };
 };
 
 
-save_animation :: proc (duration:int, gs:^GlobalSurfaces, _:string) -> int{
+save_animation :: proc (duration:int, gs:^init.GlobalSurfaces, _:string) -> int{
     blit_text(gs, "+GAME SAVED+", 0, (gs.font_rect.w * 13) );//NOTE: Needed for the screen position
     return duration == 0 ? -1 : duration - 1
 };
 
 handle_menu_mode_event :: proc (event:^sdl2.Event, 
-    using ge:^GlobalEverything,  
+    using ge:^init.GlobalEverything,  
     window:^sdl2.Window, 
     render_surface:^^sdl2.Surface, //Easiest way to do it
     ){
@@ -900,7 +416,7 @@ handle_menu_mode_event :: proc (event:^sdl2.Event,
     }
 };
 
-handle_dialogue_mode_event :: proc ( event:^sdl2.Event, using ge:^GlobalEverything){
+handle_dialogue_mode_event :: proc ( event:^sdl2.Event, using ge:^init.GlobalEverything){
     using ge.render_states.npc
     if event.type != .KEYDOWN do return;
     #partial switch event.key.keysym.sym {
@@ -921,17 +437,17 @@ handle_dialogue_mode_event :: proc ( event:^sdl2.Event, using ge:^GlobalEverythi
     }
 };
 
-handle_inventory_mode_event :: proc (event:^sdl2.Event, using ge:^GlobalEverything){
+handle_inventory_mode_event :: proc (event:^sdl2.Event, using ge:^init.GlobalEverything){
     using ge.render_states.inv
     if event.type != .KEYDOWN do return;
-    exit_option_selected := row_selected == (MAX_ITEMS_IN_INVENTORY / 2)
+    exit_option_selected := row_selected == (init.MAX_ITEMS_IN_INVENTORY / 2)
     #partial switch event.key.keysym.sym {
         case .UP:
             if row_selected != 0 do row_selected -=1
         case .DOWN:
             if exit_option_selected do return
             row_selected += 1;
-            if row_selected == (MAX_ITEMS_IN_INVENTORY / 2) do left_column_selected = true;
+            if row_selected == (init.MAX_ITEMS_IN_INVENTORY / 2) do left_column_selected = true;
         case .LEFT:
             left_column_selected = true;
         case .RIGHT:
@@ -964,8 +480,8 @@ parse_look_modifier :: proc ( str:string) -> LookModifier {
     return ._DefaultLook;
 }
 
-inventory_add_item :: proc (inv:^PlayerInventory, new_item:PLAYER_ITEM) -> i8 {
-    new_inv_item:InventoryItem_ListElem;
+inventory_add_item :: proc (inv:^init.PlayerInventory, new_item:init.PLAYER_ITEM) -> i8 {
+    new_inv_item:init.InventoryItem_ListElem;
     new_inv_item.item_enum = new_item;
     new_inv_item.next_item_index = -1;
 
@@ -977,7 +493,7 @@ inventory_add_item :: proc (inv:^PlayerInventory, new_item:PLAYER_ITEM) -> i8 {
         inv.number_of_items_held +=1 ;
         return 0;
     };
-    for i in 0..< MAX_ITEMS_IN_INVENTORY {
+    for i in 0..< init.MAX_ITEMS_IN_INVENTORY {
         if inv.occupied[i] == true do continue;
         if inv.tail_index != -1 do inv.inv_item[inv.tail_index].next_item_index = cast(i8)i;
         inv.tail_index = cast(i8)i;
@@ -990,7 +506,7 @@ inventory_add_item :: proc (inv:^PlayerInventory, new_item:PLAYER_ITEM) -> i8 {
     return -1;
 };
 
-inventory_delete_item :: proc ( inv:^PlayerInventory, deletion_index:i8) -> int {
+inventory_delete_item :: proc ( inv:^init.PlayerInventory, deletion_index:i8) -> int {
     if deletion_index == inv.origin_index {
         //TODO: ruh roh, whats going on here
         new_origin_index := inv.inv_item[inv.origin_index].next_item_index;
@@ -999,7 +515,7 @@ inventory_delete_item :: proc ( inv:^PlayerInventory, deletion_index:i8) -> int 
         inv.number_of_items_held -= 1;
         return 0;
     };
-    for i in 0..<MAX_ITEMS_IN_INVENTORY {
+    for i in 0..<init.MAX_ITEMS_IN_INVENTORY {
         if(inv.inv_item[i].next_item_index != deletion_index){continue;};
         inv.inv_item[i].next_item_index = inv.inv_item[deletion_index].next_item_index;
         inv.tail_index = cast(i8)i;
@@ -1014,7 +530,7 @@ inventory_delete_item :: proc ( inv:^PlayerInventory, deletion_index:i8) -> int 
 
 import "core:runtime"
 
-blit_general_string ::  proc (duration:int, using payload:^GlobalSurfaces, str:string) -> int {
+blit_general_string ::  proc (duration:int, using payload:^init.GlobalSurfaces, str:string) -> int {
     new_strings:= make([dynamic]string, 0, 8, context.temp_allocator)
     text  := str
     LIMIT :: LENGTH_OF_CHAR_BUFFER_ARRAY
@@ -1047,7 +563,7 @@ blit_general_string ::  proc (duration:int, using payload:^GlobalSurfaces, str:s
 
     for string, idx in new_strings {
         YPosition: = (NATIVE_HEIGHT) - (font_rect.h * i32(len(new_strings) - idx ));
-        blit_tile(font_surface_array[char_to_index(u8(' '))],LENGTH_OF_CHAR_BUFFER_ARRAY + 4, working_surface, YPosition, 0); 
+        blit_tile(font_surface_array[init.char_to_index(u8(' '))],LENGTH_OF_CHAR_BUFFER_ARRAY + 4, working_surface, YPosition, 0); 
         blit_text(payload, string, YPosition, 0);   
     }
     
@@ -1056,8 +572,8 @@ blit_general_string ::  proc (duration:int, using payload:^GlobalSurfaces, str:s
 
 
 handle_command :: proc (
-    command:ValidCommand, 
-    ge:^GlobalEverything,
+    command:init.ValidCommand, 
+    ge:^init.GlobalEverything,
     text_buffer:^InputTextBuffer, 
     ){
     using ge;
@@ -1084,7 +600,7 @@ handle_command :: proc (
         case .Quit: sdl2.PushEvent(&sdl2.Event{type = .QUIT});
         case .Go: using view_data;
             if len(tokenBuffer) == 1 {str = "Where would you like to go?";break;};
-            new_index, ok := reflect.enum_from_name(VIEW_ENUM, tokenBuffer[1]);
+            new_index, ok := reflect.enum_from_name(init.VIEW_ENUM, tokenBuffer[1]);
             switch {
                 case ok && new_index == current_view_idx: str = "You're already here!"
                 case !ok || new_index not_in adjascent_views[current_view_idx]: str = fmt.aprintf( "'%s' isn't near here.", tokenBuffer[1])
@@ -1098,7 +614,7 @@ handle_command :: proc (
             switch(parse_look_modifier(tokenBuffer[1])){
                 case ._LookInside: 
                     if(len(tokenBuffer) == 2){str = "What would you like to look in?"; break;};
-                    new_index, ok := reflect.enum_from_name(VIEW_ENUM, tokenBuffer[2]);
+                    new_index, ok := reflect.enum_from_name(init.VIEW_ENUM, tokenBuffer[2]);
                     switch {
                         case tokenBuffer[2] == "INVENTORY": 
                             game_mode = ._Inventory;
@@ -1109,14 +625,15 @@ handle_command :: proc (
                     }
                 case ._DefaultLook: 
                     item_index, item_ok := item_name_to_index(tokenBuffer[1], ge);
-                    scenery_item_index, scenery_ok := scenery_item_name_to_index(tokenBuffer[1], ge, current_view_idx);
-                    npc_index, npc_ok := reflect.enum_from_name(NPC_ENUM, tokenBuffer[1])
+                    scenery_item_index, scenery_ok := init.scenery_item_name_to_index(tokenBuffer[1], ge, current_view_idx);
+                    npc_index, npc_ok := reflect.enum_from_name(init.NPC_ENUM, tokenBuffer[1])
                     switch {
                         case tokenBuffer[1] == "INVENTORY": 
                             game_mode = ._Inventory
                         case item_ok: using item_state.player_items;
                             desc_idx := in_view_data.enum_state[item_index]
-                            str = in_view_data.view_location[item_index].(VIEW_ENUM) == current_view_idx ? in_view_data.descriptions[item_index][desc_idx]: fmt.aprintf("Cannot find the '%s'.", tokenBuffer[1])
+                            str = init.PLAYER_ITEM_inv_descriptions[item_index]
+                            str = in_view_data.view_location[item_index].(init.VIEW_ENUM) == current_view_idx ? in_view_data.descriptions[item_index][desc_idx]: fmt.aprintf("Cannot find the '%s'.", tokenBuffer[1])
                         case scenery_ok: 
                             enum_state_idx := scenery_items.enum_state[current_view_idx][scenery_item_index]
                             str = scenery_items.descriptions[current_view_idx][scenery_item_index][enum_state_idx]
@@ -1156,7 +673,7 @@ handle_command :: proc (
                     if index_within_inventory == -1 do str = fmt.aprintf( "You have no '%s'.", tokenBuffer[1])
             }
             if !ok || len(tokenBuffer) == 2 do break;
-            destination_index, dest_ok := scenery_item_name_to_index(tokenBuffer[2], ge, current_view_idx);
+            destination_index, dest_ok := init.scenery_item_name_to_index(tokenBuffer[2], ge, current_view_idx);
             switch {
                 case !dest_ok: 
                     str = fmt.aprintf( "Cannot find the '%s'.", tokenBuffer[2]);
@@ -1173,7 +690,7 @@ handle_command :: proc (
             }
         case .Talk:
             if len(tokenBuffer) == 1 {str = "Who would you like to talk to?";break;};
-            npc_index, ok := reflect.enum_from_name(NPC_ENUM, tokenBuffer[1])
+            npc_index, ok := reflect.enum_from_name(init.NPC_ENUM, tokenBuffer[1])
             switch {
                 case !ok || view_data.npc_in_room[view_data.current_view_idx] != npc_index:
                     str = fmt.aprintf("'%s' is not here.", tokenBuffer[1]);
@@ -1186,7 +703,7 @@ handle_command :: proc (
         case .ListExits: using view_data
             context.allocator = context.temp_allocator
             viewnames:[dynamic]string
-            for view in VIEW_ENUM {
+            for view in init.VIEW_ENUM {
                 if view_type[view] == .LookInside do continue
                 if view in adjascent_views[current_view_idx] do append(&viewnames, reflect.enum_string(view))
             }
@@ -1196,103 +713,39 @@ handle_command :: proc (
     }
 };
 
-init_player_item_data :: proc (s:^Item_State, view_data:^ViewData, ge:^GlobalEverything){
-
-    for i in 0..<MAX_ITEMS_IN_INVENTORY {
-        s.player_inv.inv_item[i] = {nil, -1};
-        s.player_inv.occupied[i] = false;
-    };
-    s.player_inv.origin_index = -1;
-    s.player_inv.tail_index = -1;
-    s.player_inv.number_of_items_held = 0;
-
-
-    for i in PLAYER_ITEM {
-        s.player_items.in_view_data.view_location[i] = nil;
-        s.player_items.inventory_data.index_in_inventory[i] = -1;
-    };
-
-    add_playerItem_inView :: proc(data:^PlayerItemData_InView, in_view:Maybe(VIEW_ENUM), is_takeable:bool, item:PLAYER_ITEM, description:..string){
-        data.enum_state[item] = 0 ;
-        data.view_location[item] = in_view;
-        data.descriptions[item] = slice.clone(description[:])
-        if is_takeable do data.is_takeable_item += {item};
-    }
-    
-    add_playerItem_inventory :: proc(data:^PlayerItemData_InInventory, item:PLAYER_ITEM, description:..string){
-        data.enum_state[item] = 0 ;
-        data.index_in_inventory[item] = -1;
-        data.descriptions[item] = slice.clone(description[:])
-    }
-
-    add_playerItem_inView(&s.player_items.in_view_data, .CLEARING, true, .AXE, "The axe is stumpwise lodged.")
-    add_playerItem_inventory(&s.player_items.inventory_data, .AXE, "It's a well balanced axe. Much use.")
-    add_synonym(&ge.synonyms, "HATCHET", .AXE)
-
-    take_axe_event :: proc (ge:^GlobalEverything){
-        stump_index, ok := scenery_item_name_to_index("STUMP", ge, ge.view_data.current_view_idx);
-        using ge.view_data
-        scenery_items.enum_state[current_view_idx][stump_index] = cast(int)StumpState.Normal
-    };
-    view_data.events[.CLEARING].take_events[.AXE] = take_axe_event;
-    axe_in_stump_event:PlaceEvent 
-    axe_in_stump_event.scenery_dest_index, _ = scenery_item_name_to_index("STUMP", ge, .CLEARING);
-    
-    place_axe_in_stump_event :: proc (ge:^GlobalEverything){
-        stump_index, _ := scenery_item_name_to_index("STUMP", ge,  ge.view_data.current_view_idx);
-        using ge.view_data
-        scenery_items.enum_state[current_view_idx][stump_index] = cast(int)StumpState.AxewiseStuck
-    };
-    
-    axe_in_stump_event.event = place_axe_in_stump_event;
-    view_data.events[.CLEARING].place_events[.AXE] = axe_in_stump_event;
-
-    lazarus_icon_description :="An icon St Lazarus being raised from the dead by Christ."
-    add_playerItem_inView(&s.player_items.in_view_data, .SHRINE, true, .LAZARUS_ICON, lazarus_icon_description)
-    add_playerItem_inventory(&s.player_items.inventory_data, .LAZARUS_ICON, lazarus_icon_description)
-
-    add_synonym(&ge.synonyms, "ICON", .LAZARUS_ICON)
-    add_synonym(&ge.synonyms, "LAZARUS", .LAZARUS_ICON)
-
-    icon_in_shrine_event:PlaceEvent;
-    icon_in_shrine_event.scenery_dest_index, _ = scenery_item_name_to_index("SHRINE", ge, .CHURCH);
-    view_data.events[.SHRINE].place_events[.LAZARUS_ICON] = icon_in_shrine_event;
-}
-
-
-
 main :: proc (){
 	using sdl2;
     if Init( INIT_VIDEO ) < 0 {
         fmt.printf( "SDL could not initialize! SDL_Error: %s\n", sdl2.GetError() );
         return;
     } 
+    fmt.printf("It's alive???")
     FPS :: 60;
     frameDuration :: 1000 / FPS;
-    ge:GlobalEverything;
-	init_everything(&ge)
-    alexei_start:DialogueNode = {
+    ge:init.GlobalEverything;
+	init.init_everything(&ge)
+    alexei_start:init.DialogueNode = {
         dialogue_text = "Your time is nigh.\n...Repent!",
     };
-    alexei_second:DialogueNode = {
+    alexei_second:init.DialogueNode = {
         dialogue_text = "...Else into the hole with you!", 
         parent_node = &alexei_start,
     };
-    alexei_third_1:DialogueNode = {
+    alexei_third_1:init.DialogueNode = {
         selection_option = "Hole?", 
         dialogue_text = "Yes, hole.\nThe deep hole has many sharp bits. It will be hard to fish you out.",
         parent_node = &alexei_second,
     };
-    alexei_third_2:DialogueNode = {
+    alexei_third_2:init.DialogueNode = {
         selection_option = "I'm not repenting.", 
         dialogue_text = "Alexei shakes his head. You're already in deep.",
         parent_node = &alexei_second,
     };
-    alexei_dialogue:[4]^DialogueNode = {&alexei_start, &alexei_second, &alexei_third_1, &alexei_third_2};
+    alexei_dialogue:[4]^init.DialogueNode = {&alexei_start, &alexei_second, &alexei_third_1, &alexei_third_2};
 
-    init_dialogue_nodes :: proc (nodes:[]^DialogueNode){
+    init_dialogue_nodes :: proc (nodes:[]^init.DialogueNode){
         for node in nodes {
-            node.child_nodes = make_dynamic_array([dynamic]^DialogueNode)
+            node.child_nodes = make_dynamic_array([dynamic]^init.DialogueNode)
             if node.parent_node == nil do continue;
             child_node_index := len(node.parent_node.child_nodes);
             append(&node.parent_node.child_nodes, node)
@@ -1309,7 +762,7 @@ main :: proc (){
     saveFileHandle, err := os.open("save.dat", os.O_RDONLY)
     fresh_game := err == os.ERROR_FILE_NOT_FOUND;
     os.close(saveFileHandle)
-    init_save_data_struct(&save_data, &ge)
+    init.init_save_data_struct(&save_data, &ge)
     switch fresh_game {
         case true: 
             newFile, err := os.open("save.dat", os.O_CREATE); os.close(newFile)
@@ -1331,14 +784,12 @@ main :: proc (){
         fmt.printf( "Window could not be created! SDL_Error: %s\n", sdl2.GetError());
         return ;
     };
-
     render_surface := sdl2.GetWindowSurface( window );
     surfs.working_surface = sdl2.CreateRGBSurface(0, 
         NATIVE_WIDTH, NATIVE_HEIGHT, 
         i32(render_surface.format.BitsPerPixel), u32(render_surface.format.Rmask), 
         render_surface.format.Gmask, render_surface.format.Bmask, render_surface.format.Amask);
     //^^^ setup window, render_surface, and working_surface handles here ^^^
-
     for settings.quit != true {
 		sdl2.StartTextInput()
         frameStart := sdl2.GetTicks();
@@ -1360,7 +811,7 @@ main :: proc (){
         defer if len(text_buffer.tokenBuffer) > 0 do mem.zero_item(&text_buffer)
         //blit background
         sdl2.BlitSurface(surfs.view_background_surfaces[view_data.current_view_idx], nil, surfs.working_surface, nil); 
-        for i in PLAYER_ITEM { //blit items
+        for i in init.PLAYER_ITEM { //blit items
             using item_state.player_items, view_data, surfs
             if item_state.player_items.in_view_data.view_location[i] != current_view_idx do continue;
             item_sprite := item_in_view_surfaces[i][current_view_idx];
