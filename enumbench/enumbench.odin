@@ -41,7 +41,7 @@ main :: proc() {
     read_file_by_lines_in_whole_sweepscan(enum_filename, &dtw)
     backings := Backings{
         case_backing = make([dynamic][dynamic][64]u8),
-        view_description_backing = make([dynamic][dynamic][128]u8),
+        description_backing = make([dynamic][dynamic][128]u8),
     }
 
     backing_from_dtw(&backings, &dtw)
@@ -182,92 +182,63 @@ enum_relation_window :: proc (idx:int, dtw:^enbench.DataToWrite, backings:^enben
         }
     }
 
-    if imgui.begin_tab_item("View Description") {
-        defer imgui.end_tab_item()
-        @static opt_enums_initted := false
-        DESCRIPTION_REL_OPTION :: enum {
-            Solo,
-            Derived,
-        }
+    // if imgui.begin_tab_item("View Description") {
+    //     defer imgui.end_tab_item()
 
 
+    //     for name, c_idx in case_names {
+    //         imgui.text(name)
+    //         imgui.same_line()
 
-        @static option_enums : [dynamic]DESCRIPTION_REL_OPTION
-        @static derived_option_enums :[dynamic]Maybe(enbench.ENUM_RELATION_TYPE)
-        gronk :: proc(a:Maybe(enbench.ENUM_RELATION_TYPE)) -> int {
-            switch v in a {
-                 case enbench.ENUM_RELATION_TYPE:
-                    switch v {
-                        case .Enum_Name: return 1
-                        case .View_Description: return 2
-                        case .Inv_Description: return 3
-                    }
-            }
-            return 0
-        }
-        if !opt_enums_initted {
-            option_enums = make([dynamic]DESCRIPTION_REL_OPTION)
-            derived_option_enums = make([dynamic]Maybe(enbench.ENUM_RELATION_TYPE))
-            for name in case_names{
-                append(&option_enums, DESCRIPTION_REL_OPTION.Solo)
-                append(&derived_option_enums, nil)
-            }
-            opt_enums_initted = true
-        }
+    //         option_switch: switch option_enums[c_idx] {
+    //             case .Solo:
+    //                 imgui.input_text(fmt.tprintf("##view_desc_input%v", c_idx), backings.view_description_backing[idx][c_idx][:])
+    //                 b := backings.view_description_backing[idx][c_idx]
+    //                 dtw.CASE_RELATIONS.description[idx][c_idx] = transmute(string)backings.view_description_backing[idx][c_idx][:get_cstr_end(b[:])]
+    //             case .Derived:
+    //                 // imgui.text("Placeholder")
+    //                 enum_names := reflect.enum_field_names(enbench.ENUM_RELATION_TYPE)
+    //                 nilstr := []string{"nil"}
+    //                 combo_names := slice.concatenate([][]string{nilstr, enum_names})
 
-        for name, c_idx in case_names {
-            imgui.text(name)
-            imgui.same_line()
+    //                 if !imgui.begin_combo(fmt.tprintf("##derived_combo%v", c_idx), combo_names[gronk(derived_option_enums[c_idx])]) do break option_switch; 
+    //                 defer imgui.end_combo();
+    //                 for name, combo_idx in combo_names {
+    //                     is_selected := combo_idx == gronk(derived_option_enums[c_idx]);
+    //                     if imgui.selectable(name, is_selected) {
+    //                         _enum, name_ok := reflect.enum_from_name(enbench.ENUM_RELATION_TYPE, name)
+    //                         derived_option_enums[c_idx] = Maybe(enbench.ENUM_RELATION_TYPE)(name_ok ? _enum : nil)
+    //                     } 
+    //                     if is_selected do imgui.set_item_default_focus();
+    //                 }
+    //         }
+    //         imgui.same_line()
+    //         options := reflect.enum_field_names(DESCRIPTION_REL_OPTION)
 
-            option_switch: switch option_enums[c_idx] {
-                case .Solo:
-                    imgui.input_text(fmt.tprintf("##view_desc_input%v", c_idx), backings.view_description_backing[idx][c_idx][:])
-                    b := backings.view_description_backing[idx][c_idx]
-                    dtw.CASE_RELATIONS.view_description[idx][c_idx] = transmute(string)backings.view_description_backing[idx][c_idx][:get_cstr_end(b[:])]
-                case .Derived:
-                    // imgui.text("Placeholder")
-                    enum_names := reflect.enum_field_names(enbench.ENUM_RELATION_TYPE)
-                    nilstr := []string{"nil"}
-                    combo_names := slice.concatenate([][]string{nilstr, enum_names})
+    //         if !imgui.begin_combo(fmt.tprintf("##rel_combo%v", c_idx), options[option_enums[c_idx]]) do continue; 
+    //         defer imgui.end_combo();
+    //         for name, combo_idx in options {
+    //             is_selected := combo_idx == cast(int)option_enums[c_idx];
+    //             if imgui.selectable(name, is_selected) do option_enums[c_idx] = cast(DESCRIPTION_REL_OPTION)combo_idx;//Selectable is generated here?
+    //             if is_selected do imgui.set_item_default_focus();
+    //         }
+    //     }
+    // }
 
-                    if !imgui.begin_combo(fmt.tprintf("##derived_combo%v", c_idx), combo_names[gronk(derived_option_enums[c_idx])]) do break option_switch; 
-                    defer imgui.end_combo();
-                    for name, combo_idx in combo_names {
-                        is_selected := combo_idx == gronk(derived_option_enums[c_idx]);
-                        if imgui.selectable(name, is_selected) {
-                            _enum, name_ok := reflect.enum_from_name(enbench.ENUM_RELATION_TYPE, name)
-                            derived_option_enums[c_idx] = Maybe(enbench.ENUM_RELATION_TYPE)(name_ok ? _enum : nil)
-                        } 
-                        if is_selected do imgui.set_item_default_focus();
-                    }
-            }
-            imgui.same_line()
-            options := reflect.enum_field_names(DESCRIPTION_REL_OPTION)
-
-            if !imgui.begin_combo(fmt.tprintf("##rel_combo%v", c_idx), options[option_enums[c_idx]]) do continue; 
-            defer imgui.end_combo();
-            for name, combo_idx in options {
-                is_selected := combo_idx == cast(int)option_enums[c_idx];
-                if imgui.selectable(name, is_selected) do option_enums[c_idx] = cast(DESCRIPTION_REL_OPTION)combo_idx;//Selectable is generated here?
-                if is_selected do imgui.set_item_default_focus();
-            }
-        }
-    }
-
-    if imgui.begin_tab_item("Inv Description") {
+    if imgui.begin_tab_item("Descriptions") {
         defer imgui.end_tab_item()
 
         for name, c_idx in case_names {
             imgui.text(name)
             imgui.same_line()
-            b := backings.inv_description_backing[idx][c_idx]
-            imgui.input_text(fmt.tprintf("##inv_desc_input%v", c_idx), backings.inv_description_backing[idx][c_idx][:])
+            b := backings.description_backing[idx][c_idx]
+            imgui.input_text(fmt.tprintf("##desc_input%v", c_idx), backings.description_backing[idx][c_idx][:])
             len := 0
             for c in b[:] {
                 if c == 0 || c == '\x00' do break
                 len += 1
             }
-            dtw.CASE_RELATIONS.inv_description[idx][c_idx] = transmute(string)backings.inv_description_backing[idx][c_idx][:len]
+            dtw.CASE_RELATIONS.description[idx][c_idx] = transmute(string)backings.description_backing[idx][c_idx][:len]
         }
     }
 }

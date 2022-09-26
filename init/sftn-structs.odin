@@ -16,7 +16,7 @@ ViewData :: struct {
 };
 
 SceneryItemData :: struct {
-	sceneryItemNames:[VIEW_ENUM][dynamic]string,
+	sceneryItemNames:[VIEW_ENUM][dynamic]string, //TODO: Enums for scenery items?
 	enum_state:[VIEW_ENUM][dynamic]int,
 	descriptions:[VIEW_ENUM][dynamic][]string,
 }

@@ -23,27 +23,23 @@ ENUM :: struct {
 
 ENUM_RELATION_TYPE :: enum {
 	Enum_Name,
-	View_Description,
-	Inv_Description,
+	Description,
 }
 
 ENUM_CASE_RELATIONS :: struct {
 	enum_name:[dynamic][dynamic]int,
-	view_description:[dynamic][dynamic]string,
-	inv_description:[dynamic][dynamic]string,
+	description:[dynamic][dynamic]string,
 }
 
 Backings :: struct {
     case_backing:[dynamic][dynamic][64]u8, // [each_enum]
-    view_description_backing:[dynamic][dynamic][128]u8,
-	inv_description_backing:[dynamic][dynamic][128]u8,
+    description_backing:[dynamic][dynamic][128]u8,
 }
 
 backing_from_dtw :: proc (backing:^Backings, dtw:^DataToWrite) {
     for e, idx in &dtw.ENUM.name {
         append(&backing.case_backing, make([dynamic][64]u8))
-        append(&backing.view_description_backing, make([dynamic][128]u8))
-		append(&backing.inv_description_backing, make([dynamic][128]u8))
+        append(&backing.description_backing, make([dynamic][128]u8))
 
         for c in &dtw.ENUM.cases[idx] {
             new_backing := new([64]u8)
@@ -51,27 +47,17 @@ backing_from_dtw :: proc (backing:^Backings, dtw:^DataToWrite) {
             append(&backing.case_backing[idx], new_backing^)
             c = cast(string)new_backing[:len(c)]
         }
-        for c in &dtw.CASE_RELATIONS.view_description[idx] {
+        for c in &dtw.CASE_RELATIONS.description[idx] {
             error_msg :: "Error! Description over 128 chars in length!\n"
             if len(c) > 127 {
                 fmt.printf("Error! Description for %v %v over 128 chars in length!\n")
             }
             new_backing := new([128]u8)
             copy(new_backing[:], c)
-            append(&backing.view_description_backing[idx], new_backing^)
+            append(&backing.description_backing[idx], new_backing^)
             c = cast(string)new_backing[:len(c)]
         }
 
-		for c in &dtw.CASE_RELATIONS.inv_description[idx] {
-            error_msg :: "Error! Description over 128 chars in length!\n"
-            if len(c) > 127 {
-                fmt.printf("Error! Description for %v %v over 128 chars in length!\n")
-            }
-            new_backing := new([128]u8)
-            copy(new_backing[:], c)
-            append(&backing.inv_description_backing[idx], new_backing^)
-            c = cast(string)new_backing[:len(c)]
-        }
     }
 }
 
@@ -82,13 +68,10 @@ init_case_relations :: proc (dtw:^DataToWrite) {
 		for _idx in 0..<len(dtw.ENUM.cases[idx]) do append(&new_int_dynarr, -1)
 		append(&dtw.CASE_RELATIONS.enum_name, new_int_dynarr)
 
-		new_view_desc_dynarr := make([dynamic]string)
-		for _idx in 0..<len(dtw.ENUM.cases[idx]) do append(&new_view_desc_dynarr, "")
-		append(&dtw.CASE_RELATIONS.view_description, new_view_desc_dynarr)
+		new_desc_dynarr := make([dynamic]string)
+		for _idx in 0..<len(dtw.ENUM.cases[idx]) do append(&new_desc_dynarr, "")
+		append(&dtw.CASE_RELATIONS.description, new_desc_dynarr)
 
-		new_invdesc_dynarr := make([dynamic]string)
-		for _idx in 0..<len(dtw.ENUM.cases[idx]) do append(&new_invdesc_dynarr, "")
-		append(&dtw.CASE_RELATIONS.inv_description, new_invdesc_dynarr)
 	}
 }
 
@@ -135,37 +118,19 @@ ODINSOURCE_make_e2e_relation :: proc (idx:int, _enum:ENUM, _erel:ENUM_CASE_RELAT
 	return concatenate({decl, open_scope, join(cases[:], "\n"), close_scope})
 }
 
-ODINSOURCE_make_view_description :: proc (idx:int, _enum:ENUM, _erel:ENUM_CASE_RELATIONS) -> (string, bool) {
+ODINSOURCE_make_description :: proc (idx:int, _enum:ENUM, _erel:ENUM_CASE_RELATIONS) -> (string, bool) {
 	using strings
-	if slice.all_of(_erel.view_description[idx][:], "") do return "", true
-	if slice.any_of(_erel.view_description[idx][:], "") {
+	if slice.all_of(_erel.description[idx][:], "") do return "", true
+	if slice.any_of(_erel.description[idx][:], "") {
 		fmt.printf("Descriptions for %v not handled!", _enum.name[idx])
 		return "", false
 	}
 
 	e_name := cast(string)_enum.name[idx];
-	decl := concatenate({e_name, "_view_descriptions := ", "[", e_name, "] string "})
+	decl := concatenate({e_name, "_descriptions := ", "[", e_name, "] string "})
 	cases := make([dynamic]string)
 	fmt.printf("Decl %v \n", decl)
-	for description, enum_case in _erel.view_description[idx] {
-		append(&cases, fmt.tprintf("\t.%v = \"%v\",", _enum.cases[idx][enum_case], description))
-	}
-	return concatenate({decl, open_scope, join(cases[:], "\n"), close_scope}), true
-}
-
-ODINSOURCE_make_inv_description :: proc (idx:int, _enum:ENUM, _erel:ENUM_CASE_RELATIONS) -> (string, bool) {
-	using strings
-	if slice.all_of(_erel.inv_description[idx][:], "") do return "", true
-	if slice.any_of(_erel.inv_description[idx][:], "") {
-		fmt.printf("Descriptions for %v not handled!", _enum.name[idx])
-		return "", false
-	}
-
-	e_name := cast(string)_enum.name[idx];
-	decl := concatenate({e_name, "_inv_descriptions := ", "[", e_name, "] string "})
-	cases := make([dynamic]string)
-	fmt.printf("Decl %v \n", decl)
-	for description, enum_case in _erel.inv_description[idx] {
+	for description, enum_case in _erel.description[idx] {
 		append(&cases, fmt.tprintf("\t.%v = \"%v\",", _enum.cases[idx][enum_case], description))
 	}
 	return concatenate({decl, open_scope, join(cases[:], "\n"), close_scope}), true
@@ -217,10 +182,8 @@ flatmapper :: proc(a: []$S/[]$U, f: proc(U) -> ($V, bool), allocator := context.
 delete_enum :: proc (dtw:^DataToWrite, idx:int) {
 	delete(dtw.CASE_RELATIONS.enum_name[idx])
 	ordered_remove(&dtw.CASE_RELATIONS.enum_name, idx)
-	delete(dtw.CASE_RELATIONS.inv_description[idx])
-	ordered_remove(&dtw.CASE_RELATIONS.inv_description, idx)
-	delete(dtw.CASE_RELATIONS.view_description[idx])
-	ordered_remove(&dtw.CASE_RELATIONS.view_description, idx)
+	delete(dtw.CASE_RELATIONS.description[idx])
+	ordered_remove(&dtw.CASE_RELATIONS.description, idx)
 	ordered_remove(&dtw.ENUM.name, idx)
 	delete(dtw.ENUM.cases[idx])
 	ordered_remove(&dtw.ENUM.cases, idx)
@@ -276,8 +239,7 @@ read_file_by_lines_in_whole_sweepscan :: proc (filepath:string, dtw:^DataToWrite
 					if !slice.contains(split_line, testname) do continue
 					for elem in split_line {
 						if strings.contains(elem, "_enum_relation") do ENUM_RELATION_TYPE = .Enum_Name
-						if strings.contains(elem, "_view_descriptions") do ENUM_RELATION_TYPE = .View_Description
-						if strings.contains(elem, "_inv_descriptions") do ENUM_RELATION_TYPE = .Inv_Description
+						if strings.contains(elem, "_descriptions") do ENUM_RELATION_TYPE = .Description
 						if !strings.contains(elem, "[") do continue
 						base_enum, _ := strings.remove_all(elem, "[")
 						base_enum, _ = strings.remove_all(base_enum, "]")
@@ -301,20 +263,13 @@ read_file_by_lines_in_whole_sweepscan :: proc (filepath:string, dtw:^DataToWrite
 						fmt.printf("Length of case relations for %v %v \n",  base_enum_idx, len(dtw.CASE_RELATIONS.enum_name[base_enum_idx]))
 						fmt.printf("Case idx -> %v \n", case_idx)
 						dtw.CASE_RELATIONS.enum_name[base_enum_idx][case_idx] = assigned_enum_idx
-					case .View_Description:
+					case .Description:
 						find_quote :: proc(s:rune) -> bool {return s != '\"'}
 						the_string := strings.trim_left_proc(line, find_quote)
 						the_string = strings.trim_right_proc(the_string, find_quote)
 						honk := the_string[1:len(the_string)-1]
 						fmt.printf("Assigning %v to %v \n", _case, honk)
-						dtw.CASE_RELATIONS.view_description[base_enum_idx][case_idx] = strings.clone(honk)
-					case .Inv_Description:
-						find_quote :: proc(s:rune) -> bool {return s != '\"'}
-						the_string := strings.trim_left_proc(line, find_quote)
-						the_string = strings.trim_right_proc(the_string, find_quote)
-						honk := the_string[1:len(the_string)-1]
-						fmt.printf("Assigning %v to %v \n", _case, honk)
-						dtw.CASE_RELATIONS.inv_description[base_enum_idx][case_idx] = strings.clone(honk)
+						dtw.CASE_RELATIONS.description[base_enum_idx][case_idx] = strings.clone(honk)
 				}
 		}
 	}
@@ -336,26 +291,23 @@ write_data_to_file :: proc(filename:string, pkg_name:string, dtw:^DataToWrite) {
 	append(&str_2_cat, fmt.tprintf("package %v;\n\n", pkg_name))
 	append(&str_2_cat, "import \"core:slice\"\n" )
 
-	for idx in 0..<len(dtw.ENUM.name) {
+	for _, idx in dtw.ENUM.name {
 		_enum := ODINSOURCE_make_enum(dtw.ENUM, idx)
 		append(&str_2_cat, _enum)
 	}
-	for idx in 0..<len(dtw.ENUM.name) {
+	for _, idx in dtw.ENUM.name {
 		relation := ODINSOURCE_make_e2e_relation(idx, dtw.ENUM, dtw.CASE_RELATIONS)
 		append(&str_2_cat, relation)
 	}
 
 	for _, idx in dtw.ENUM.name {
-		funcs := []proc(int, ENUM, ENUM_CASE_RELATIONS) -> (string, bool){ODINSOURCE_make_view_description, ODINSOURCE_make_inv_description}
-
-		for func in funcs {
-			description, ok := func(idx, dtw.ENUM, dtw.CASE_RELATIONS)
-			if !ok {
-				fmt.printf(description); return;
-			}
-			append(&str_2_cat, description)
-			append(&str_2_cat, "\n")
+		description, ok := ODINSOURCE_make_description(idx, dtw.ENUM, dtw.CASE_RELATIONS)
+		if !ok {
+			fmt.printf(description); return;
 		}
+		append(&str_2_cat, description)
+		append(&str_2_cat, "\n")
+		
 	}
 
 
