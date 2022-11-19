@@ -1,1 +1,1 @@
-odin build hello.odin -file -debug
+odin build . -out:hello.exe -debug
