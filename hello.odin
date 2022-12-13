@@ -1856,7 +1856,7 @@ main :: proc (){
                 }   
 
                 if len(entity_ids) > 0 && saved_mouse_event.button.type == .MOUSEBUTTONDOWN {
-                    if saved_mouse_event.button.button == .LEFT {
+                    if saved_mouse_event.button.button == sdl2.BUTTON_LEFT {
                         fmt.printf("Button binary: %8b \n", saved_mouse_event.button.button)
                         rect_pt_ul := [2]i32{entity_surfs[0].clip_rect.x, entity_surfs[0].clip_rect.y}
                         rect_pt_br := rect_pt_ul + [2]i32{entity_surfs[0].clip_rect.w, entity_surfs[0].clip_rect.h}
@@ -1866,7 +1866,7 @@ main :: proc (){
                             anim_push(&ge.anim, blit_mouse_text, 120, cast(string)ecs.get_comp(ge.ctx, entity_ids[0], Name)^)
                         }
                     }
-                    if saved_mouse_event.button.button == .RIGHT {
+                    if saved_mouse_event.button.button == sdl2.BUTTON_LEFT {
                         fmt.printf("Button binary: %8b \n", saved_mouse_event.button.button)
 
                         rect_pt_ul := [2]i32{entity_surfs[0].clip_rect.x, entity_surfs[0].clip_rect.y}

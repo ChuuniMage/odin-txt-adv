@@ -124,7 +124,7 @@ rc_menu_end :: proc (using ge:^GlobalEverything, using menu:^SFTN_RightClick, mo
     }
 
     delete(menu.elem_data)
-    return mouse_event.button.button == .LEFT 
+    return mouse_event.button.button == sdl2.BUTTON_LEFT
 }
 
 menu_start :: proc (menu:^SFTN_ImmUI, origin:[2]i32) {
